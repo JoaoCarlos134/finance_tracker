@@ -61,7 +61,13 @@ def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]
     exact XP export schema hasn't been pinned down yet.
     """
     text = raw_bytes.decode("utf-8-sig", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
+    # Brazilian exports commonly use ";" as the delimiter, since "," is the
+    # decimal separator there. Sniff instead of assuming a fixed delimiter.
+    try:
+        dialect = csv.Sniffer().sniff(text[:2048], delimiters=",;")
+    except csv.Error:
+        dialect = csv.excel
+    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
 
     if not reader.fieldnames:
         return [], ["CSV file has no header row"]

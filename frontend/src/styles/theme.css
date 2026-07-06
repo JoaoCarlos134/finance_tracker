@@ -1,0 +1,76 @@
+:root {
+  /* Dominant / accent */
+  --color-ink-900: #12202e;
+  --color-accent: #c9752f;
+  --color-accent-dark: #a85e22;
+
+  /* Semantic */
+  --color-success: #2f6844;
+  --color-success-soft: #7fbf98;
+  --color-warning: #a8791a;
+  --color-error: #b23b3b;
+  --color-error-soft: #e0958a;
+  --color-error-bg: #fbeae8;
+  --color-error-row-bg: #fbf1ef;
+
+  /* Neutrals */
+  --color-ink-700: #3e4a56;
+  --color-warm-600: #6b6255;
+  --color-warm-500: #8a8072;
+  --color-warm-300: #b8ad9c;
+  --color-warm-100: #eee9df;
+  --color-bg: #f6f3ee;
+  --color-surface: #ffffff;
+  --color-border: #f0ebe1;
+  --color-border-soft: #f5f1e9;
+  --color-hover-row: #fbf6ee;
+
+  /* Type */
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-numeric: "Archivo", sans-serif;
+
+  /* Spacing (8px base grid) */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
+  --space-8: 64px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  font-family: var(--font-body);
+  color: var(--color-ink-900);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+a:hover {
+  color: var(--color-accent-dark);
+}
+
+.skeleton {
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--color-warm-100) 0%, #f8f4ec 50%, var(--color-warm-100) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}

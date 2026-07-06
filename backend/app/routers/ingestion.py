@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.csv_parser import parse_transactions_csv
+from app.services.ingest import parse_transactions_csv
 from app.database import get_db
 from app.models import Transaction
 from app.schemas import IngestResult

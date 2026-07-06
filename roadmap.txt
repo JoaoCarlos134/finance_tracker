@@ -1,0 +1,163 @@
+FINANCE TRACKER — ROADMAP
+==========================
+Fonte de verdade do estado do projeto. Atualizado a cada sessão de trabalho.
+Última atualização: 2026-07-06
+
+CONVENÇÕES
+----------
+[ ] não iniciado
+[~] em andamento (nunca deixar assim ao final de uma sessão sem justificativa abaixo do item)
+[x] concluído e testado (nunca marcar sem ter testado de fato)
+
+==========================
+FASE 1 — Backend Skeleton
+==========================
+[x] Estrutura de pastas (backend/, frontend/, data/raw/) — inclui app/services/ e backend/tests/, alinhada ao CLAUDE.md
+[x] Modelo de dados: Transaction (date, description, amount, category, raw_source_file)
+[x] Setup SQLAlchemy + SQLite
+[x] Endpoint de upload de CSV (recebe arquivo, salva no banco) — testado via tests/test_api.py
+[x] Endpoint de listagem de transações — testado via tests/test_api.py
+[x] .gitignore (data/raw/, venv, node_modules, .env)
+[x] Testes básicos do parsing de CSV — 4 testes em tests/test_ingest.py, todos passando (`pytest`)
+
+==========================
+FASE 2 — Frontend Skeleton
+==========================
+[~] Scaffold Vite + React — arquivos escritos manualmente (package.json, vite.config.js, index.html, src/), mas `npm install` nunca completou nesta máquina (ver Notas/Bloqueios); não verificado rodando
+[~] Página de listagem de transações (consome API do backend) — implementada em src/components/TransactionsCard.jsx, não verificada rodando
+[~] Componente de upload de CSV — implementado em src/components/TransactionsCard.jsx via input file + POST /ingest/csv, não verificado rodando
+[~] Estados: loading, erro, vazio (sem transações ainda) — implementados em src/components/TransactionsCard.jsx (prop `status`), não verificados rodando
+
+==========================
+FASE 3 — Categorização
+==========================
+[ ] Categorização baseada em regras (palavras-chave no description)
+[ ] Interface para o usuário corrigir/confirmar categoria
+[ ] Categorização via modelo (NLP simples) treinado nas correções do usuário
+
+==========================
+FASE 4 — Modelo Preditivo
+==========================
+[ ] Feature engineering (gastos por categoria, sazonalidade, lags)
+[ ] Modelo de previsão de gasto mensal por categoria (Prophet ou XGBoost)
+[ ] Avaliação do modelo (métricas, backtesting)
+[ ] Endpoint que expõe a previsão para o frontend
+
+==========================
+FASE 5 — Design e Dashboard
+==========================
+[~] Sistema visual importado do Claude Design ("Finance Dashboard System")
+    e implementado em frontend/src/ — theme.css (tokens de cor/tipografia/
+    espaçamento), TopNav, SummaryCard, TransactionsCard (estados default/
+    loading/error/vazio), utils/summary.js (cálculo de saldo/receita/gasto
+    e variação mês-a-mês). Não verificado rodando no navegador — mesmo
+    bloqueio de `npm install` da Fase 2 (ver Notas/Bloqueios).
+[ ] DESIGN.md (paleta, tipografia, grid de espaçamento, estados de componente)
+[ ] Gráficos de gastos por categoria (Plotly ou Recharts)
+[ ] Gráfico de previsão vs. realizado
+[ ] Revisão de responsividade (mobile-first)
+
+==========================
+FASE 6 — Deploy
+==========================
+[ ] Migração SQLite → Postgres
+[ ] Deploy backend (Render/Fly.io)
+[ ] Deploy frontend
+[ ] Link ao vivo no README / portfólio
+
+==========================
+DECISÕES TÉCNICAS REGISTRADAS
+==========================
+(cada entrada: data — decisão — por quê)
+
+- 2026-07-06 — SQLite escolhido em vez de Postgres na Fase 1 — zero setup
+  necessário para começar a desenvolver localmente; migração para Postgres
+  planejada antes do deploy (Fase 6).
+
+- 2026-07-06 — Gerenciamento de dependências Python via venv + requirements.txt,
+  não Poetry — simplicidade para um projeto de portfólio.
+
+- 2026-07-06 — Parsing de CSV usa correspondência de colunas genérica
+  (lista de nomes candidatos + fallback de formato numérico/data brasileiro)
+  em vez de schema fixo da XP — nenhuma exportação real estava disponível
+  no momento do scaffold. Precisa ser ajustado quando um export real
+  chegar em data/raw/.
+
+- 2026-07-06 — Parser de CSV agora detecta automaticamente o delimitador
+  (vírgula ou ponto-e-vírgula) em vez de assumir vírgula fixa — um teste
+  real (tests/test_ingest.py) revelou que valores no formato brasileiro
+  ("-1.234,56") quebram um parser delimitado por vírgula, já que a vírgula
+  decimal colide com o delimitador. Exports brasileiros comumente usam
+  ponto-e-vírgula por esse motivo exato.
+
+- 2026-07-06 — Duplicatas são permitidas no re-upload de CSV por enquanto
+  (sem lógica de dedup) — decisão de adiar até entender o que é uma
+  duplicata real num export da XP.
+
+- 2026-07-06 — Transaction.category é nullable na ingestão — categorização
+  (baseada em regras, depois ML) é a Fase 3, não faz parte da ingestão.
+
+- 2026-07-06 — Versões fixadas em requirements.txt foram atualizadas
+  (fastapi 0.115.6, pydantic 2.10.4, sqlalchemy 2.0.36, python-multipart
+  0.0.20) — pydantic-core==2.7.4 não tem wheel pré-compilada para Python
+  3.13 nesta máquina, forçando build via Rust/cargo que falhava no linker
+  do MSVC. Isso tinha sido erroneamente diagnosticado antes como bloqueio
+  do proxy SSL corporativo; não era — pytest (pacote pure-Python) instalou
+  normalmente, isolando o problema ao build nativo do pydantic-core.
+
+- 2026-07-06 — Adicionados pytest e httpx como dependências de
+  desenvolvimento para permitir testes automatizados (item "Testes básicos
+  do parsing de CSV" da Fase 1). Testes de API usam SQLite in-memory com
+  StaticPool para isolar cada teste do banco de desenvolvimento real.
+
+- 2026-07-06 — Criado backend/tests/fixtures/sample_statement.csv (dados
+  sintéticos, não reais) no formato ponto-e-vírgula/brasileiro plausível
+  de um extrato da XP. Objetivo duplo: (1) teste de integração cobrindo
+  parser + endpoint juntos com um arquivo real em disco, e (2) permitir
+  testar o app manualmente pelo navegador (upload via file picker) antes
+  de haver um export real da XP disponível.
+
+- 2026-07-06 — Sistema visual final importado do projeto Claude Design do
+  usuário ("Finance Dashboard System.dc.html", via DesignSync MCP) e
+  implementado em frontend/src/: theme.css com os tokens (navy dominante
+  #12202E, accent copper #C9752F, fontes Space Grotesk/IBM Plex Sans/
+  Archivo), componentes TopNav/SummaryCard/TransactionsCard, e
+  utils/summary.js. Manteve o nome "Finance Tracker" na navbar em vez de
+  "Ledger" (nome usado no mockup do design) — decisão do usuário para não
+  criar divergência de marca com o resto do projeto (README, docs).
+
+- 2026-07-06 — Cartão de resumo (saldo/receita/gasto) calculado no
+  frontend a partir de GET /transactions, sem endpoint novo no backend —
+  soma simples de amount (saldo), soma dos positivos (receita) e soma dos
+  negativos (gasto). Formatação de moeda em BRL/pt-BR (Intl.NumberFormat),
+  não USD como no mockup, já que os dados reais serão de uma corretora
+  brasileira (XP).
+
+- 2026-07-06 — Indicador de variação "vs. mês anterior" só aparece quando
+  há pelo menos 2 meses distintos nos dados (compara saldo acumulado até
+  o fim de cada mês); com menos de 2 meses o indicador fica oculto em vez
+  de mostrar uma tendência inventada — consistente com o princípio 04 do
+  próprio sistema de design ("Honest states").
+
+==========================
+NOTAS / BLOQUEIOS
+==========================
+(qualquer coisa que travou o progresso, ficou ambígua, ou precisa de decisão do usuário)
+
+- 2026-07-06 — RESOLVIDO: instalação de dependências do backend parecia
+  bloqueada por um proxy SSL corporativo (SELF_SIGNED_CERT_IN_CHAIN), mas
+  o diagnóstico estava errado. A causa real era pydantic-core==2.7.4 sem
+  wheel pré-compilada para Python 3.13 nesta máquina. Corrigido atualizando
+  as versões em requirements.txt (ver Decisões Técnicas). Backend agora
+  instala, sobe e passa em todos os testes (`pytest` → 7 passed).
+
+- 2026-07-06 — CONFIRMADO (não é diagnóstico incorreto, ao contrário do
+  caso do backend): `npm install` em frontend/ falha com
+  SELF_SIGNED_CERT_IN_CHAIN ao acessar registry.npmjs.org. Diferente do
+  pip (que acessa PyPI normalmente nesta máquina), o npm genuinamente não
+  confia na CA do proxy corporativo. node_modules/ nunca foi criado.
+  Precisa de decisão do usuário: (a) instalar as deps em outra máquina/
+  perfil onde o npm já confia na CA corporativa, ou (b) fornecer o
+  caminho do certificado da CA corporativa para configurar
+  `npm config set cafile`. Usuário já optou anteriormente por instalar
+  as deps por conta própria depois — Fase 2 permanece [~] até lá.
