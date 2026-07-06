@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Date, Float, Integer, String
+from sqlalchemy import Column, Date, Integer, String
 
 from app.database import Base
+from app.db_types import MoneyCents
 
 
 class Transaction(Base):
@@ -9,7 +10,11 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False, index=True)
     description = Column(String, nullable=False)
-    amount = Column(Float, nullable=False)
-    # nullable: categorization is done by a future ML step, not at ingestion time
+    amount = Column(MoneyCents, nullable=False)
+    # nullable: rows the rule engine can't match stay uncategorized until
+    # the user labels them or the future ML step fills them in
     category = Column(String, nullable=True)
+    # 'rule' (keyword engine) or 'user' (manual correction). User labels are
+    # never overwritten by re-running the rules — they become training data.
+    category_source = Column(String, nullable=True)
     raw_source_file = Column(String, nullable=False)

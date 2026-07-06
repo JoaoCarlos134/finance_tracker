@@ -1,11 +1,25 @@
-const API_BASE_URL = 'http://localhost:8000'
+// Relative in dev (Vite proxies /api to the backend); override for
+// deployments where the API lives on another origin.
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
-export async function fetchTransactions() {
-  const res = await fetch(`${API_BASE_URL}/transactions`)
+async function getJson(path) {
+  const res = await fetch(`${API_BASE_URL}${path}`)
   if (!res.ok) {
-    throw new Error(`Failed to fetch transactions: ${res.status}`)
+    throw new Error(`GET ${path} failed: ${res.status}`)
   }
   return res.json()
+}
+
+export function fetchTransactions() {
+  return getJson('/transactions')
+}
+
+export function fetchAnalyticsSummary() {
+  return getJson('/analytics/summary')
+}
+
+export function fetchMonthly() {
+  return getJson('/analytics/monthly')
 }
 
 export async function uploadCsv(file) {

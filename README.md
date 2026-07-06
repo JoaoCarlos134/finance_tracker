@@ -1,14 +1,31 @@
 # Finance Tracker
 
+![CI](https://github.com/JoaoCarlos134/finance_tracker/actions/workflows/ci.yml/badge.svg)
+
 Personal finance tracker built as a portfolio project. Ingests manually
 exported CSV statements (currently targeting XP Investimentos exports),
-stores them in a database, and displays them in a web UI.
+stores them in a database, categorizes them with keyword rules, and serves
+analytics to a React dashboard.
 
 **Stack:** FastAPI + SQLAlchemy + SQLite (backend), React + Vite (frontend).
 
-This is currently a skeleton: upload a CSV, see the parsed rows land in the
-database, and see them listed in the browser. Categorization/ML logic is not
-built yet — the `category` field exists but is left `null` at ingestion time.
+Money is handled as `Decimal` end-to-end on the server (stored as integer
+cents, serialized as exact decimal strings) — floats never enter the
+accounting path. Rule-based categorization runs at ingestion; manual
+corrections are tracked separately (`category_source`) so they can later
+train an ML categorizer without being overwritten.
+
+## API
+
+| Endpoint | Description |
+|---|---|
+| `POST /ingest/csv` | Upload a CSV statement (parsed, categorized, stored) |
+| `GET /transactions?limit=&offset=` | Paginated transaction list |
+| `PATCH /transactions/{id}` | Correct a category (marks it user-labeled) |
+| `POST /categorize/run` | Re-apply rules to all non-user-labeled rows |
+| `GET /analytics/summary` | Balance, income, spending, count (SQL aggregation) |
+| `GET /analytics/monthly` | Per-month income/spending/net |
+| `GET /analytics/by-category` | Totals and counts per category |
 
 ## Project layout
 
@@ -73,18 +90,17 @@ npm install
 npm run dev
 ```
 
-The app runs at `http://localhost:5173` and expects the backend to be
-running at `http://localhost:8000` (see `frontend/src/api.js`).
+The app runs at `http://localhost:5178`. In dev, requests to `/api/*` are
+proxied by Vite to the backend at `http://localhost:8000` (see
+`vite.config.js`), so no CORS setup is needed; set `VITE_API_URL` when the
+API lives on another origin.
 
-> Note: `npm install` was not run as part of scaffolding this project — this
-> environment hit a corporate SSL-inspection proxy error
-> (`SELF_SIGNED_CERT_IN_CHAIN`) when trying to reach the npm registry. Run
-> `npm install` yourself in an environment where your npm client trusts your
-> network's CA (this is likely already configured for your normal workflow).
+**Windows shortcut:** double-click `run.bat` at the repo root — it starts
+both servers in their own windows and opens the dashboard in your browser.
 
 ## Using it
 
-1. Start the backend and frontend (above).
+1. Start the backend and frontend (above, or via `run.bat`).
 2. Drop a CSV export from your brokerage into `data/raw/` (optional — you can
    upload from anywhere on disk via the browser file picker).
 3. Open `http://localhost:5173`, use the file picker to upload the CSV.

@@ -1,6 +1,7 @@
 import csv
 import io
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 # Candidate header names per field, since the exact XP export schema isn't
 # pinned down yet. Add real column names here once a live export is available.
@@ -36,19 +37,22 @@ def _parse_date(raw: str) -> date:
     raise ValueError(f"Unrecognized date format: {raw!r}")
 
 
-def _parse_amount(raw: str) -> float:
+def _parse_amount(raw: str) -> Decimal:
     raw = raw.strip().replace("R$", "").strip()
     try:
-        return float(raw)
-    except ValueError:
+        return Decimal(raw)
+    except InvalidOperation:
         pass
     # Brazilian format: "." as thousands separator, "," as decimal separator
     br_normalized = raw.replace(".", "").replace(",", ".")
-    return float(br_normalized)
+    try:
+        return Decimal(br_normalized)
+    except InvalidOperation as exc:
+        raise ValueError(f"Unrecognized amount format: {raw!r}") from exc
 
 
 class ParsedRow:
-    def __init__(self, date_: date, description: str, amount: float):
+    def __init__(self, date_: date, description: str, amount: Decimal):
         self.date = date_
         self.description = description
         self.amount = amount

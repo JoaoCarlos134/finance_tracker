@@ -18,7 +18,12 @@ FASE 1 — Backend Skeleton
 [x] Endpoint de upload de CSV (recebe arquivo, salva no banco) — testado via tests/test_api.py
 [x] Endpoint de listagem de transações — testado via tests/test_api.py
 [x] .gitignore (data/raw/, venv, node_modules, .env)
-[x] Testes básicos do parsing de CSV — 4 testes em tests/test_ingest.py, todos passando (`pytest`)
+[x] Testes básicos do parsing de CSV — tests/test_ingest.py, todos passando (`pytest`)
+[x] (novo, 2026-07-06) Dinheiro como Decimal — amounts armazenados como centavos inteiros (MoneyCents em app/db_types.py), serializados como string decimal exata na API; float nunca entra no caminho contábil
+[x] (novo, 2026-07-06) Paginação em GET /transactions (limit/offset, ordenação estável por data+id)
+[x] (novo, 2026-07-06) Endpoints de analytics em SQL — /analytics/summary, /analytics/monthly, /analytics/by-category — testados com somas exatas
+[x] (novo, 2026-07-06) Lint com ruff (pyproject.toml) — código limpo
+[x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
 
 ==========================
 FASE 2 — Frontend Skeleton
@@ -31,9 +36,9 @@ FASE 2 — Frontend Skeleton
 ==========================
 FASE 3 — Categorização
 ==========================
-[ ] Categorização baseada em regras (palavras-chave no description)
-[ ] Interface para o usuário corrigir/confirmar categoria
-[ ] Categorização via modelo (NLP simples) treinado nas correções do usuário
+[x] Categorização baseada em regras (palavras-chave no description) — app/services/categorize.py (comerciantes brasileiros, sem acento/caixa), aplicada na ingestão + POST /categorize/run para reprocessar; testada em test_categorize.py e test_api.py
+[~] Interface para o usuário corrigir/confirmar categoria — lado da API pronto (PATCH /transactions/{id} marca category_source='user', preservado pelo /categorize/run); falta a UI no frontend
+[ ] Categorização via modelo (NLP simples) treinado nas correções do usuário — as correções já ficam rotuladas via category_source='user', prontas para virar dados de treino
 
 ==========================
 FASE 4 — Modelo Preditivo
@@ -52,7 +57,7 @@ FASE 5 — Design e Dashboard
     loading/error/vazio), utils/summary.js (cálculo de saldo/receita/gasto
     e variação mês-a-mês). Não verificado rodando no navegador — mesmo
     bloqueio de `npm install` da Fase 2 (ver Notas/Bloqueios).
-[ ] DESIGN.md (paleta, tipografia, grid de espaçamento, estados de componente)
+[x] DESIGN.md (paleta, tipografia, grid de espaçamento, estados de componente) — na raiz do repo, espelhando os tokens de frontend/src/styles/theme.css
 [ ] Gráficos de gastos por categoria (Plotly ou Recharts)
 [ ] Gráfico de previsão vs. realizado
 [ ] Revisão de responsividade (mobile-first)
@@ -139,6 +144,31 @@ DECISÕES TÉCNICAS REGISTRADAS
   de mostrar uma tendência inventada — consistente com o princípio 04 do
   próprio sistema de design ("Honest states").
 
+- 2026-07-06 — Dinheiro migrado de Float para Decimal via TypeDecorator
+  (centavos inteiros no SQLite, Decimal no Python, string decimal exata no
+  JSON) — floats binários acumulam erro de arredondamento em agregações;
+  é o erro clássico de domínio em finanças. Centavos inteiros mantêm SUM
+  exato no SQLite e portam sem mudança para Postgres. O frontend usa
+  Number() só para exibição, nunca para contabilidade.
+
+- 2026-07-06 — Categorização por regras com rastreio de origem
+  (category_source='rule'|'user') — correções manuais nunca são
+  sobrescritas pelo reprocessamento e formam o dataset rotulado para o
+  categorizador ML da Fase 3. Regras com primeiro-acerto-vence, ordenadas
+  da categoria mais específica para a mais genérica.
+
+- 2026-07-06 — Agregações (summary/monthly/by-category) movidas para SQL
+  no backend em vez de JavaScript no frontend — é a habilidade que o
+  portfólio quer demonstrar, e sum/coalesce herdam o tipo MoneyCents do
+  SQLAlchemy, então nenhum float entra na agregação. strftime('%Y-%m') é
+  específico do SQLite; trocar por to_char/date_trunc na migração Postgres.
+
+- 2026-07-06 — Proxy do Vite (/api → localhost:8000) em vez de URL
+  hardcoded + CORS por regex — requisições same-origin em dev; porta do
+  Vite fixada em 5178 para o run.ps1 achar o app (com varredura de portas
+  e checagem do <title>, já que o log do Vite tem códigos ANSI que
+  quebravam o parsing por regex).
+
 ==========================
 NOTAS / BLOQUEIOS
 ==========================
@@ -151,13 +181,19 @@ NOTAS / BLOQUEIOS
   as versões em requirements.txt (ver Decisões Técnicas). Backend agora
   instala, sobe e passa em todos os testes (`pytest` → 7 passed).
 
-- 2026-07-06 — CONFIRMADO (não é diagnóstico incorreto, ao contrário do
-  caso do backend): `npm install` em frontend/ falha com
-  SELF_SIGNED_CERT_IN_CHAIN ao acessar registry.npmjs.org. Diferente do
-  pip (que acessa PyPI normalmente nesta máquina), o npm genuinamente não
-  confia na CA do proxy corporativo. node_modules/ nunca foi criado.
-  Precisa de decisão do usuário: (a) instalar as deps em outra máquina/
-  perfil onde o npm já confia na CA corporativa, ou (b) fornecer o
-  caminho do certificado da CA corporativa para configurar
-  `npm config set cafile`. Usuário já optou anteriormente por instalar
-  as deps por conta própria depois — Fase 2 permanece [~] até lá.
+- 2026-07-06 — RESOLVIDO (por direção explícita do usuário): o bloqueio de
+  SSL do npm foi contornado com um .npmrc temporário (strict-ssl=false)
+  apenas durante o `npm install`; o arquivo foi removido imediatamente
+  após, restaurando a verificação padrão. node_modules/ instalado (63
+  pacotes), `npm run build` passa. package-lock.json commitado (o CI usa
+  `npm ci`). Nota: `npm audit` não pôde rodar (mesmo bloqueio de rede).
+
+- 2026-07-06 — PENDENTE: no teste do run.ps1, o backend não respondeu em
+  /health dentro dos 30s de polling (o frontend subiu e o navegador abriu
+  normalmente). Causa ainda não investigada — pode ser cold start do venv
+  em OneDrive ou falha na janela do uvicorn. Verificar na próxima sessão:
+  se a janela do backend mostrar erro, corrigir; senão, aumentar o timeout.
+
+- 2026-07-06 — Verificação visual do dashboard no navegador ainda não
+  confirmada pelo usuário (o run.ps1 abriu http://localhost:5178/). Se algo
+  estiver quebrado visualmente, tratar na próxima sessão.

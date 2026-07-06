@@ -1,27 +1,33 @@
 import { useEffect, useState } from 'react'
-import { fetchTransactions, uploadCsv } from './api'
+import { fetchAnalyticsSummary, fetchMonthly, fetchTransactions, uploadCsv } from './api'
 import TopNav from './components/TopNav'
 import SummaryCard from './components/SummaryCard'
 import TransactionsCard from './components/TransactionsCard'
-import { computeSummary } from './utils/summary'
+import { monthOverMonthChange } from './utils/summary'
+
+const EMPTY_SUMMARY = { balance: 0, income: 0, spending: 0 }
 
 function App() {
   const [transactions, setTransactions] = useState([])
+  const [summary, setSummary] = useState(EMPTY_SUMMARY)
+  const [monthly, setMonthly] = useState([])
   const [status, setStatus] = useState('loading') // 'loading' | 'error' | 'default'
   const [uploadStatus, setUploadStatus] = useState(null)
 
-  const loadTransactions = () => {
+  const loadAll = () => {
     setStatus('loading')
-    fetchTransactions()
-      .then((data) => {
-        setTransactions(data)
+    Promise.all([fetchTransactions(), fetchAnalyticsSummary(), fetchMonthly()])
+      .then(([txs, summaryData, monthlyData]) => {
+        setTransactions(txs)
+        setSummary(summaryData)
+        setMonthly(monthlyData)
         setStatus('default')
       })
       .catch(() => setStatus('error'))
   }
 
   useEffect(() => {
-    loadTransactions()
+    loadAll()
   }, [])
 
   const handleFileChange = async (event) => {
@@ -35,7 +41,7 @@ function App() {
         `Inserted ${result.rows_inserted} of ${result.rows_parsed} rows` +
           (result.rows_skipped ? ` (${result.rows_skipped} skipped)` : ''),
       )
-      loadTransactions()
+      loadAll()
     } catch (err) {
       setUploadStatus(`Upload failed: ${err.message}`)
     } finally {
@@ -43,19 +49,22 @@ function App() {
     }
   }
 
-  const summary = computeSummary(transactions)
-
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       <TopNav />
       <div style={{ padding: '32px 28px 64px', maxWidth: 1180, margin: '0 auto' }}>
-        <SummaryCard {...summary} />
+        <SummaryCard
+          balance={summary.balance}
+          income={summary.income}
+          spending={summary.spending}
+          monthOverMonthChange={monthOverMonthChange(monthly)}
+        />
         <TransactionsCard
           status={status}
           transactions={transactions}
           uploadStatus={uploadStatus}
           onFileChange={handleFileChange}
-          onRetry={loadTransactions}
+          onRetry={loadAll}
         />
       </div>
     </div>

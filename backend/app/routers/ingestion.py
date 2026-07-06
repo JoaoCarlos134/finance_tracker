@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.services.ingest import parse_transactions_csv
 from app.database import get_db
 from app.models import Transaction
 from app.schemas import IngestResult
+from app.services.categorize import suggest_category
+from app.services.ingest import parse_transactions_csv
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
@@ -22,12 +23,14 @@ async def ingest_csv(file: UploadFile, db: Session = Depends(get_db)):
 
     # Duplicates are allowed for now: every parsed row is inserted as-is.
     for row in rows:
+        category = suggest_category(row.description)
         db.add(
             Transaction(
                 date=row.date,
                 description=row.description,
                 amount=row.amount,
-                category=None,
+                category=category,
+                category_source="rule" if category else None,
                 raw_source_file=file.filename,
             )
         )

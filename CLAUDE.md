@@ -22,23 +22,31 @@ finance-tracker/
 ├── CLAUDE.md                  ← este arquivo
 ├── roadmap.txt                ← fonte de verdade do progresso (ver seção abaixo)
 ├── README.md
+├── DESIGN.md                  ← sistema visual (tokens espelhados em theme.css)
+├── run.ps1 / run.bat          ← sobe backend+frontend e abre o dashboard
+├── .github/workflows/ci.yml   ← CI: ruff + pytest + build do frontend
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── models.py
 │   │   ├── database.py
+│   │   ├── db_types.py        ← MoneyCents (dinheiro = centavos inteiros/Decimal)
+│   │   ├── models.py
 │   │   ├── schemas.py
 │   │   ├── routers/
-│   │   │   └── transactions.py
+│   │   │   ├── transactions.py    ← GET paginado, PATCH categoria
+│   │   │   ├── ingestion.py       ← POST /ingest/csv
+│   │   │   ├── categorization.py  ← POST /categorize/run
+│   │   │   └── analytics.py       ← summary / monthly / by-category
 │   │   └── services/
-│   │       └── ingest.py
+│   │       ├── ingest.py          ← parsing de CSV (puro)
+│   │       └── categorize.py      ← regras de categorização (puro)
 │   ├── requirements.txt
-│   └── tests/
+│   ├── pyproject.toml         ← config do ruff
+│   └── tests/                 ← pytest (unit + API, fixtures/)
 ├── frontend/
-│   └── (scaffold padrão Vite + React)
-├── data/
-│   └── raw/                   ← CSVs exportados, nunca commitados (gitignore)
-└── DESIGN.md                  ← criado na Fase 5
+│   └── src/                   ← components/, utils/, styles/theme.css
+└── data/
+    └── raw/                   ← CSVs exportados, nunca commitados (gitignore)
 ```
 
 ## Convenções de Código

@@ -1,4 +1,4 @@
-import { formatAmount, formatDate } from '../utils/summary'
+import { formatAmount, formatDate, isNegative } from '../utils/summary'
 
 const gridCols = { display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.8fr 0.9fr', alignItems: 'center' }
 
@@ -17,7 +17,7 @@ function SkeletonRow() {
 }
 
 function TransactionRow({ tx }) {
-  const isNegative = tx.amount < 0
+  const negative = isNegative(tx.amount)
   return (
     <div
       style={{ ...gridCols, padding: '15px 24px', borderBottom: '1px solid var(--color-border-soft)' }}
@@ -34,7 +34,7 @@ function TransactionRow({ tx }) {
           textAlign: 'right',
           fontFamily: 'var(--font-numeric)',
           fontVariantNumeric: 'tabular-nums',
-          color: isNegative ? 'var(--color-error)' : 'var(--color-success)',
+          color: negative ? 'var(--color-error)' : 'var(--color-success)',
         }}
       >
         {formatAmount(tx.amount)}

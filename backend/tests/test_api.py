@@ -3,22 +3,36 @@ from pathlib import Path
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def test_ingest_sample_xp_like_statement(client):
+def _ingest_fixture(client):
     csv_bytes = (FIXTURES_DIR / "sample_statement.csv").read_bytes()
     res = client.post(
         "/ingest/csv",
         files={"file": ("sample_statement.csv", csv_bytes, "text/csv")},
     )
     assert res.status_code == 200
-    body = res.json()
+    return res.json()
+
+
+def test_ingest_sample_xp_like_statement(client):
+    body = _ingest_fixture(client)
     assert body["rows_inserted"] == 7
     assert body["rows_skipped"] == 0
 
-    res = client.get("/transactions")
-    transactions = res.json()
+    transactions = client.get("/transactions").json()
     assert len(transactions) == 7
     salary = next(t for t in transactions if t["description"] == "Salario")
-    assert salary["amount"] == 5000.00
+    assert salary["amount"] == "5000.00"  # money crosses JSON as exact strings
+
+
+def test_ingestion_applies_category_rules(client):
+    _ingest_fixture(client)
+    transactions = client.get("/transactions").json()
+    by_description = {t["description"]: t for t in transactions}
+
+    assert by_description["Supermercado Extra"]["category"] == "Groceries"
+    assert by_description["Supermercado Extra"]["category_source"] == "rule"
+    assert by_description["Salario"]["category"] == "Income"
+    assert by_description["Uber"]["category"] == "Transport"
 
 
 def test_list_transactions_empty(client):
@@ -27,27 +41,77 @@ def test_list_transactions_empty(client):
     assert res.json() == []
 
 
-def test_ingest_csv_then_list(client):
-    csv_content = (
-        b"date,description,amount\n"
-        b"2026-01-15,Coffee shop,-12.50\n"
-        b"2026-01-16,Salary,2500.00\n"
-    )
-    res = client.post(
-        "/ingest/csv",
-        files={"file": ("statement.csv", csv_content, "text/csv")},
-    )
-    assert res.status_code == 200
-    body = res.json()
-    assert body["rows_inserted"] == 2
-    assert body["rows_skipped"] == 0
+def test_list_transactions_pagination(client):
+    _ingest_fixture(client)
 
-    res = client.get("/transactions")
+    first_page = client.get("/transactions", params={"limit": 3, "offset": 0}).json()
+    second_page = client.get("/transactions", params={"limit": 3, "offset": 3}).json()
+
+    assert len(first_page) == 3
+    assert len(second_page) == 3
+    assert {t["id"] for t in first_page}.isdisjoint({t["id"] for t in second_page})
+
+
+def test_patch_category_marks_user_source(client):
+    _ingest_fixture(client)
+    tx = client.get("/transactions").json()[0]
+
+    res = client.patch(f"/transactions/{tx['id']}", json={"category": "Custom"})
     assert res.status_code == 200
-    transactions = res.json()
-    assert len(transactions) == 2
-    assert transactions[0]["raw_source_file"] == "statement.csv"
-    assert transactions[0]["category"] is None
+    assert res.json()["category"] == "Custom"
+    assert res.json()["category_source"] == "user"
+
+
+def test_patch_missing_transaction_returns_404(client):
+    res = client.patch("/transactions/9999", json={"category": "X"})
+    assert res.status_code == 404
+
+
+def test_categorize_run_preserves_user_labels(client):
+    _ingest_fixture(client)
+    transactions = client.get("/transactions").json()
+    uber = next(t for t in transactions if t["description"] == "Uber")
+
+    client.patch(f"/transactions/{uber['id']}", json={"category": "Business travel"})
+    run = client.post("/categorize/run").json()
+
+    assert run["examined"] == 6  # the user-labeled row is excluded
+    relabeled = next(
+        t for t in client.get("/transactions").json() if t["id"] == uber["id"]
+    )
+    assert relabeled["category"] == "Business travel"
+    assert relabeled["category_source"] == "user"
+
+
+def test_analytics_summary_sums_exactly(client):
+    _ingest_fixture(client)
+    body = client.get("/analytics/summary").json()
+
+    # fixture: +45.32 +5000.00 +1200.00 = 6245.32 income;
+    # -354.90 -128.50 -32.15 -55.90 = -571.45 spending
+    assert body["income"] == "6245.32"
+    assert body["spending"] == "-571.45"
+    assert body["balance"] == "5673.87"
+    assert body["transaction_count"] == 7
+
+
+def test_analytics_monthly_groups_by_month(client):
+    _ingest_fixture(client)
+    body = client.get("/analytics/monthly").json()
+
+    assert len(body) == 1  # fixture is all January 2026
+    assert body[0]["month"] == "2026-01"
+    assert body[0]["net"] == "5673.87"
+
+
+def test_analytics_by_category_groups_totals(client):
+    _ingest_fixture(client)
+    body = client.get("/analytics/by-category").json()
+    categories = {row["category"]: row for row in body}
+
+    assert categories["Groceries"]["total"] == "-354.90"
+    assert categories["Income"]["total"] == "5000.00"
+    assert sum(row["count"] for row in body) == 7
 
 
 def test_ingest_rejects_non_csv_file(client):
