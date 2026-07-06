@@ -1,0 +1,42 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from app.csv_parser import parse_transactions_csv
+from app.database import get_db
+from app.models import Transaction
+from app.schemas import IngestResult
+
+router = APIRouter(prefix="/ingest", tags=["ingestion"])
+
+
+@router.post("/csv", response_model=IngestResult)
+async def ingest_csv(file: UploadFile, db: Session = Depends(get_db)):
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are supported")
+
+    raw_bytes = await file.read()
+    rows, errors = parse_transactions_csv(raw_bytes)
+
+    if not rows and errors:
+        raise HTTPException(status_code=422, detail=errors)
+
+    # Duplicates are allowed for now: every parsed row is inserted as-is.
+    for row in rows:
+        db.add(
+            Transaction(
+                date=row.date,
+                description=row.description,
+                amount=row.amount,
+                category=None,
+                raw_source_file=file.filename,
+            )
+        )
+    db.commit()
+
+    return IngestResult(
+        filename=file.filename,
+        rows_parsed=len(rows) + len(errors),
+        rows_inserted=len(rows),
+        rows_skipped=len(errors),
+        errors=errors,
+    )

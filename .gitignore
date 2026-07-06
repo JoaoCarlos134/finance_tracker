@@ -1,0 +1,30 @@
+# Raw brokerage data — never commit personal financial exports
+data/raw/*
+!data/raw/.gitkeep
+
+# Generated SQLite database
+*.db
+*.sqlite3
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/dist/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local Claude Code settings (machine-specific, not shared)
+.claude/settings.local.json
