@@ -13,10 +13,14 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 def list_transactions(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    account_type: str | None = Query(None, pattern="^(bank|credit_card)$"),
     db: Session = Depends(get_db),
 ):
+    query = db.query(Transaction)
+    if account_type:
+        query = query.filter(Transaction.account_type == account_type)
     return (
-        db.query(Transaction)
+        query
         # secondary id ordering keeps same-day rows stable across pages
         .order_by(desc(Transaction.date), desc(Transaction.id))
         .limit(limit)

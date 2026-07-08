@@ -19,6 +19,7 @@ class TransactionOut(BaseModel):
     category: str | None
     category_source: str | None
     raw_source_file: str
+    account_type: str | None
 
 
 class CategoryUpdate(BaseModel):

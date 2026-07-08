@@ -128,9 +128,50 @@ def test_ingesting_bank_and_card_statements_avoids_double_counting(client):
     assert payment_rows[0]["raw_source_file"] == "sample_bank_extract.csv"
 
     body = client.get("/analytics/summary").json()
-    # bank: -240 + 2538.83 - 700 - 130 = 1468.83
+    # bank: -240 + 2538.83 - 700 = 1598.83 (the -130 "Credit Card Payment" row
+    # is excluded from totals — see test below)
     # card (payment dropped, purchases flipped negative): -45.00 - 955.00
-    assert body["balance"] == "468.83"
+    assert body["balance"] == "598.83"
+
+
+def test_credit_card_payment_excluded_from_spending_totals(client):
+    # The bank withdrawal that pays the card bill settles debt already
+    # recognized via the itemized card purchases — counting both would
+    # double-count the same spending. Confirmed with the user before
+    # implementing (see roadmap.txt decisions log, 2026-07-08).
+    _ingest_fixture(client, "sample_bank_extract.csv")
+    _ingest_fixture(client, "sample_fatura.csv")
+
+    transactions = client.get("/transactions").json()
+    payment = next(t for t in transactions if t["description"].lower() == "pagamento de fatura")
+    assert payment["category"] == "Credit Card Payment"  # still visible in the raw ledger
+
+    by_category = client.get("/analytics/by-category").json()
+    assert "Credit Card Payment" not in {row["category"] for row in by_category}
+
+    monthly = client.get("/analytics/monthly").json()
+    total_net = sum(float(m["net"]) for m in monthly)
+    assert round(total_net, 2) == 598.83
+
+
+def test_account_type_persisted_and_filterable(client):
+    _ingest_fixture(client, "sample_bank_extract.csv")
+    _ingest_fixture(client, "sample_fatura.csv")
+
+    transactions = client.get("/transactions").json()
+    by_source = {t["raw_source_file"]: t["account_type"] for t in transactions}
+    assert by_source["sample_bank_extract.csv"] == "bank"
+    assert by_source["sample_fatura.csv"] == "credit_card"
+
+    bank_only = client.get("/transactions", params={"account_type": "bank"}).json()
+    card_only = client.get("/transactions", params={"account_type": "credit_card"}).json()
+    assert len(bank_only) == 4
+    assert len(card_only) == 2
+    assert all(t["account_type"] == "bank" for t in bank_only)
+    assert all(t["account_type"] == "credit_card" for t in card_only)
+
+    bank_summary = client.get("/analytics/summary", params={"account_type": "bank"}).json()
+    assert bank_summary["balance"] == "1598.83"
 
 
 def test_analytics_monthly_groups_by_month(client):

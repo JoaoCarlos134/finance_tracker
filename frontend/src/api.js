@@ -2,24 +2,31 @@
 // deployments where the API lives on another origin.
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
-async function getJson(path) {
-  const res = await fetch(`${API_BASE_URL}${path}`)
+async function getJson(path, params = {}) {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)),
+  ).toString()
+  const res = await fetch(`${API_BASE_URL}${path}${query ? `?${query}` : ''}`)
   if (!res.ok) {
     throw new Error(`GET ${path} failed: ${res.status}`)
   }
   return res.json()
 }
 
-export function fetchTransactions() {
-  return getJson('/transactions')
+export function fetchTransactions({ accountType, limit } = {}) {
+  return getJson('/transactions', { account_type: accountType, limit })
 }
 
-export function fetchAnalyticsSummary() {
-  return getJson('/analytics/summary')
+export function fetchAnalyticsSummary({ accountType } = {}) {
+  return getJson('/analytics/summary', { account_type: accountType })
 }
 
-export function fetchMonthly() {
-  return getJson('/analytics/monthly')
+export function fetchMonthly({ accountType } = {}) {
+  return getJson('/analytics/monthly', { account_type: accountType })
+}
+
+export function fetchByCategory({ accountType } = {}) {
+  return getJson('/analytics/by-category', { account_type: accountType })
 }
 
 export function fetchCategories() {

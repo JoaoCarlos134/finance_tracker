@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   fetchAnalyticsSummary,
+  fetchByCategory,
   fetchCategories,
   fetchMonthly,
   fetchTransactions,
@@ -10,25 +11,53 @@ import {
 import TopNav from './components/TopNav'
 import SummaryCard from './components/SummaryCard'
 import TransactionsCard from './components/TransactionsCard'
+import AccountTypeToggle from './components/AccountTypeToggle'
+import MonthlyChart from './components/MonthlyChart'
+import CategoryBreakdownChart from './components/CategoryBreakdownChart'
 import { monthOverMonthChange } from './utils/summary'
 
 const EMPTY_SUMMARY = { balance: 0, income: 0, spending: 0 }
+
+const chartCard = {
+  background: 'var(--color-surface)',
+  borderRadius: 14,
+  padding: '20px 24px',
+  marginBottom: 28,
+  boxShadow: '0 1px 2px rgba(18,32,46,0.05)',
+}
+
+const chartTitle = {
+  fontFamily: 'var(--font-display)',
+  fontWeight: 600,
+  fontSize: 16,
+  color: 'var(--color-ink-900)',
+  marginBottom: 12,
+}
 
 function App() {
   const [transactions, setTransactions] = useState([])
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [monthly, setMonthly] = useState([])
+  const [byCategory, setByCategory] = useState([])
   const [categories, setCategories] = useState([])
+  const [accountType, setAccountType] = useState(null) // null | 'bank' | 'credit_card'
   const [status, setStatus] = useState('loading') // 'loading' | 'error' | 'default'
   const [uploadStatus, setUploadStatus] = useState(null)
 
   const loadAll = () => {
     setStatus('loading')
-    Promise.all([fetchTransactions(), fetchAnalyticsSummary(), fetchMonthly(), fetchCategories()])
-      .then(([txs, summaryData, monthlyData, categoryData]) => {
+    Promise.all([
+      fetchTransactions({ accountType, limit: 500 }),
+      fetchAnalyticsSummary({ accountType }),
+      fetchMonthly({ accountType }),
+      fetchByCategory({ accountType }),
+      fetchCategories(),
+    ])
+      .then(([txs, summaryData, monthlyData, byCategoryData, categoryData]) => {
         setTransactions(txs)
         setSummary(summaryData)
         setMonthly(monthlyData)
+        setByCategory(byCategoryData)
         setCategories(categoryData)
         setStatus('default')
       })
@@ -37,7 +66,7 @@ function App() {
 
   useEffect(() => {
     loadAll()
-  }, [])
+  }, [accountType])
 
   const handleCategoryChange = async (id, category) => {
     // Optimistic: the row updates instantly, reverted only if the PATCH
@@ -87,12 +116,23 @@ function App() {
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       <TopNav />
       <div style={{ padding: '32px 28px 64px', maxWidth: 1180, margin: '0 auto' }}>
+        <AccountTypeToggle value={accountType} onChange={setAccountType} />
         <SummaryCard
           balance={summary.balance}
           income={summary.income}
           spending={summary.spending}
           monthOverMonthChange={monthOverMonthChange(monthly)}
         />
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 20 }}>
+          <div style={chartCard}>
+            <div style={chartTitle}>Income vs. spending by month</div>
+            <MonthlyChart monthly={monthly} />
+          </div>
+          <div style={chartCard}>
+            <div style={chartTitle}>Spending by category</div>
+            <CategoryBreakdownChart categories={byCategory} />
+          </div>
+        </div>
         <TransactionsCard
           status={status}
           transactions={transactions}

@@ -18,3 +18,7 @@ class Transaction(Base):
     # never overwritten by re-running the rules — they become training data.
     category_source = Column(String, nullable=True)
     raw_source_file = Column(String, nullable=False)
+    # 'bank' or 'credit_card', set from the statement type detected at parse
+    # time (app/services/ingest.py). Nullable so rows ingested before this
+    # column existed don't break; new rows always get one of the two values.
+    account_type = Column(String, nullable=True, index=True)

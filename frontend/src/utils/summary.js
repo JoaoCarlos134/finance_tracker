@@ -30,6 +30,9 @@ export function monthOverMonthChange(monthlyPoints) {
   const balances = monthlyPoints.map((point) => (cumulative += Number(point.net)))
   const previous = balances[balances.length - 2]
   const latest = balances[balances.length - 1]
-  if (previous === 0) return null
+  // A near-zero baseline (the running balance happens to cross ~0 that
+  // month) makes any percentage change relative to it explode into a
+  // meaningless number (e.g. -17117%) — hide it rather than show nonsense.
+  if (Math.abs(previous) < 10) return null
   return ((latest - previous) / Math.abs(previous)) * 100
 }

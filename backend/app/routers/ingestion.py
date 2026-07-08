@@ -32,6 +32,7 @@ async def ingest_csv(file: UploadFile, db: Session = Depends(get_db)):
                 category=category,
                 category_source="rule" if category else None,
                 raw_source_file=file.filename,
+                account_type=row.account_type,
             )
         )
     db.commit()

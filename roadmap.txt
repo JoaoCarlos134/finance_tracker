@@ -25,7 +25,7 @@ FASE 1 — Backend Skeleton
 [x] (novo, 2026-07-06) Lint com ruff (pyproject.toml) — código limpo
 [x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
 [x] (novo, 2026-07-08) Suporte a extrato bancário (Data;Hora;Descricao;Valor;Saldo, ano com 2 dígitos, "-R$ X" com espaço residual) e fatura de cartão (Data;Estabelecimento;Portador;Valor;Parcela) no mesmo parser — 6 novos testes cobrindo os dois formatos + o cenário de dedup entre eles
-[ ] (pedido do usuário, 2026-07-08) Persistir o tipo de conta (bank/credit_card) no Transaction — hoje o parser já sabe diferenciar (flag is_credit_card em ingest.py, usada para inverter sinal e descartar "Pagamento de fatura"), mas descarta essa informação depois de processar a linha; guardar explicitamente permite filtrar/agrupar por conta sem reinferir do nome do arquivo. Pré-requisito para a separação bank/cartão pedida na Fase 5
+[x] (novo, 2026-07-08) Persistir o tipo de conta (bank/credit_card) no Transaction — coluna account_type, preenchida a partir da flag is_credit_card já calculada em ingest.py. GET /transactions e todos os /analytics/* aceitam ?account_type=bank|credit_card. Dados locais existentes (78 linhas reais) migrados via ALTER TABLE + backfill por nome de arquivo (contém "fatura" → credit_card). Testado: test_account_type_persisted_and_filterable
 
 ==========================
 FASE 2 — Frontend Skeleton
@@ -63,10 +63,10 @@ FASE 5 — Design e Dashboard
     screenshots via Chrome headless, com os 78 dados reais do usuário,
     batendo com DESIGN.md; status [~] anterior estava desatualizado
 [x] DESIGN.md (paleta, tipografia, grid de espaçamento, estados de componente) — na raiz do repo, espelhando os tokens de frontend/src/styles/theme.css
-[ ] Gráficos de gastos por categoria (Plotly ou Recharts)
-[ ] (pedido do usuário, 2026-07-08) Gráfico de gastos por categoria com percentual do total (pizza/donut) — complementa /analytics/by-category (já existe no backend, retorna total+count por categoria; falta o cálculo de % e a visualização)
-[ ] (pedido do usuário, 2026-07-08) Visualização separada por conta: extrato bancário vs fatura de cartão (filtro/toggle na tela) — depende do item de Fase 1 que persiste o tipo de conta
-[ ] (pedido do usuário, 2026-07-08) Gráfico de transações ao longo do tempo (linha ou barra) usando datas reais, cobrindo tanto extrato quanto fatura, com visualização de múltiplos meses lado a lado (não só o mês atual) — /analytics/monthly já existe no backend e já é multi-mês; falta o gráfico no frontend
+[x] (novo, 2026-07-08) Gráficos de gastos por categoria (Recharts) — escolhido em vez de Plotly (mais leve, mais idiomático em React)
+[x] (novo, 2026-07-08) Gráfico de gastos por categoria com percentual do total (donut, CategoryBreakdownChart.jsx) — só categorias com total negativo (gasto real), % calculada sobre o total de gasto, não sobre todas as categorias (senão Income/Transfers dominariam o gráfico)
+[x] (novo, 2026-07-08) Visualização separada por conta: toggle All/Bank/Credit Card (AccountTypeToggle.jsx) — refiltra transações, resumo e os dois gráficos novos
+[x] (novo, 2026-07-08) Gráfico de transações ao longo do tempo (MonthlyChart.jsx, barras Income/Spending por mês, Recharts) — usa /analytics/monthly, já multi-mês
 [ ] Gráfico de previsão vs. realizado
 [ ] Revisão de responsividade (mobile-first)
 
@@ -217,6 +217,45 @@ DECISÕES TÉCNICAS REGISTRADAS
   então a seta nativa do navegador ficava sem largura reservada e
   aparecia solta perto da coluna de data em vez de colada no texto da
   categoria. Corrigido em theme.css (.category-select).
+
+- 2026-07-08 — DECISÃO (confirmada com o usuário): "Credit Card Payment"
+  (o saque bancário que paga a fatura) foi excluído de saldo/gasto em
+  /analytics/* — essa mesma quantia já é reconhecida via as compras
+  individuais do cartão (Dining, Shopping etc.), então contar as duas
+  seria contar o mesmo gasto duas vezes. A transação continua visível em
+  GET /transactions (razão/ledger completo), só não entra nos agregados.
+  Constante NON_SPENDING_CATEGORIES em analytics.py, pensada para crescer
+  se surgir outro caso parecido.
+
+- 2026-07-08 — RESOLVIDO: bug real de SQL encontrado testando essa
+  exclusão — `Transaction.category.notin_(...)` sozinho exclui TODAS as
+  linhas com category NULL também, porque em SQL `NULL NOT IN (...)`
+  avalia como NULL (nem verdadeiro nem falso), não como verdadeiro. Isso
+  faria todo gasto não-categorizado desaparecer de saldo/spending/
+  monthly/by-category silenciosamente — um bug muito mais sério que o
+  que estava sendo corrigido. Resolvido com
+  `or_(category.is_(None), category.notin_(...))` em analytics.py.
+  Pego pelos testes antes de ir para produção (test_credit_card_payment_
+  excluded_from_spending_totals falhou com um valor 955 a mais no total).
+
+- 2026-07-08 — RESOLVIDO: gráficos Recharts (barra mensal e pizza de
+  categoria) não apareciam no screenshot — a legenda da pizza renderizava
+  mas os arcos e as barras não. Causa: animação de entrada padrão do
+  Recharts (isAnimationActive, cresce de 0 até o valor final) interage
+  mal com o --virtual-time-budget do Chrome headless usado para
+  screenshot, prendendo o chart no frame inicial (tamanho 0). Corrigido
+  com isAnimationActive={false} nos componentes Bar e Pie — também é a
+  escolha certa para um dashboard de dados (não precisa reanimar toda
+  vez que os dados mudam).
+
+- 2026-07-08 — RESOLVIDO: indicador "vs. mês anterior" mostrou -17117%
+  depois da exclusão do Credit Card Payment mudar a trajetória do saldo
+  acumulado — o saldo do mês anterior ficou muito perto de zero (-R$4,99)
+  só por coincidência dos dados, e qualquer variação percentual relativa
+  a uma base perto de zero explode. Corrigido em utils/summary.js: o
+  indicador some quando |saldo do mês anterior| < R$10, em vez de só
+  quando é exatamente zero — consistente com o princípio "Honest states"
+  (esconder em vez de mostrar um número sem sentido).
 
 ==========================
 NOTAS / BLOQUEIOS

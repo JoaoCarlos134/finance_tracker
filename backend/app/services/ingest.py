@@ -73,10 +73,11 @@ def _parse_amount(raw: str) -> Decimal:
 
 
 class ParsedRow:
-    def __init__(self, date_: date, description: str, amount: Decimal):
+    def __init__(self, date_: date, description: str, amount: Decimal, account_type: str):
         self.date = date_
         self.description = description
         self.amount = amount
+        self.account_type = account_type
 
 
 def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]]:
@@ -100,6 +101,7 @@ def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]
     fieldnames = list(reader.fieldnames)
     normalized_map = {_normalize(h): h for h in fieldnames}
     is_credit_card = any(col in normalized_map for col in CREDIT_CARD_MARKER_COLUMNS)
+    account_type = "credit_card" if is_credit_card else "bank"
 
     date_col = _find_column(normalized_map, "date")
     desc_col = _find_column(normalized_map, "description")
@@ -140,7 +142,7 @@ def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]
                     if parcela and parcela != "-":
                         description = f"{description} ({parcela})"
 
-            rows.append(ParsedRow(parsed_date, description, parsed_amount))
+            rows.append(ParsedRow(parsed_date, description, parsed_amount, account_type))
         except (ValueError, KeyError) as exc:
             errors.append(f"Row {i}: {exc}")
 
