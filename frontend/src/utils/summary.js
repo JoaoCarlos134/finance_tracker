@@ -20,6 +20,14 @@ export function formatDate(dateStr) {
   return dateFormatter.format(new Date(`${dateStr}T00:00:00`))
 }
 
+const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit" })
+
+// monthKey is "YYYY-MM" (from a transaction's date or /analytics/monthly)
+export function formatMonth(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number)
+  return monthFormatter.format(new Date(year, month - 1, 1))
+}
+
 // Percentage change of cumulative balance between the last two months of
 // /analytics/monthly. Null when there's under two months of history — never
 // fabricate a trend from a single month.

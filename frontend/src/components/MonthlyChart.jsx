@@ -1,12 +1,5 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { formatAmount } from '../utils/summary'
-
-const monthLabelFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' })
-
-function monthLabel(monthKey) {
-  const [year, month] = monthKey.split('-').map(Number)
-  return monthLabelFormatter.format(new Date(year, month - 1, 1))
-}
+import { formatAmount, formatMonth } from '../utils/summary'
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -41,7 +34,7 @@ export default function MonthlyChart({ monthly }) {
   }
 
   const data = monthly.map((m) => ({
-    month: monthLabel(m.month),
+    month: formatMonth(m.month),
     Income: Number(m.income),
     Spending: Number(m.spending),
   }))

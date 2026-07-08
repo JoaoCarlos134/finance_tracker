@@ -67,6 +67,7 @@ FASE 5 — Design e Dashboard
 [x] (novo, 2026-07-08) Gráfico de gastos por categoria com percentual do total (donut, CategoryBreakdownChart.jsx) — só categorias com total negativo (gasto real), % calculada sobre o total de gasto, não sobre todas as categorias (senão Income/Transfers dominariam o gráfico)
 [x] (novo, 2026-07-08) Visualização separada por conta: toggle All/Bank/Credit Card (AccountTypeToggle.jsx) — refiltra transações, resumo e os dois gráficos novos
 [x] (novo, 2026-07-08) Gráfico de transações ao longo do tempo (MonthlyChart.jsx, barras Income/Spending por mês, Recharts) — usa /analytics/monthly, já multi-mês
+[x] (pedido do usuário, 2026-07-08) Barra de ordenação de transações (data/categoria/valor, crescente/decrescente) e separação por mês na lista — TransactionControls.jsx, mesmo padrão visual do AccountTypeToggle (pills). Client-side only (sort/filter em cima do array já carregado), sem mudança no backend; verificado com teste de lógica em Node (ordenação de data/valor/categoria, incluindo categoria nula)
 [ ] Gráfico de previsão vs. realizado
 [ ] Revisão de responsividade (mobile-first)
 
@@ -256,6 +257,14 @@ DECISÕES TÉCNICAS REGISTRADAS
   indicador some quando |saldo do mês anterior| < R$10, em vez de só
   quando é exatamente zero — consistente com o princípio "Honest states"
   (esconder em vez de mostrar um número sem sentido).
+
+- 2026-07-08 — Ordenação/filtro por mês da lista de transações (Transaction
+  Controls.jsx) implementados client-side, sobre o array já carregado (até
+  500 linhas via GET /transactions), em vez de expor sort_by/sort_dir/month
+  na API — na escala atual (78 linhas reais) não há ganho de performance
+  em mover para o servidor, e mantém a mudança isolada em um componente
+  sem tocar App.jsx/backend. Revisitar se o volume de dados crescer muito
+  (paginação real exigiria ordenação no servidor).
 
 ==========================
 NOTAS / BLOQUEIOS

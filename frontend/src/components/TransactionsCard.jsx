@@ -1,4 +1,6 @@
-import { formatAmount, formatDate, isNegative } from '../utils/summary'
+import { useMemo, useState } from 'react'
+import { formatAmount, formatDate, formatMonth, isNegative } from '../utils/summary'
+import TransactionControls from './TransactionControls'
 
 const gridCols = { display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.8fr 0.9fr', alignItems: 'center' }
 
@@ -98,6 +100,15 @@ function UploadControl({ onFilesSelected, label, directory = false }) {
   )
 }
 
+function sortTransactions(transactions, field, direction) {
+  const sign = direction === 'asc' ? 1 : -1
+  return [...transactions].sort((a, b) => {
+    if (field === 'amount') return (Number(a.amount) - Number(b.amount)) * sign
+    if (field === 'category') return (a.category ?? '').localeCompare(b.category ?? '') * sign
+    return a.date.localeCompare(b.date) * sign
+  })
+}
+
 export default function TransactionsCard({
   status,
   transactions,
@@ -107,6 +118,22 @@ export default function TransactionsCard({
   onCategoryChange,
   onRetry,
 }) {
+  const [sortField, setSortField] = useState('date')
+  const [sortDirection, setSortDirection] = useState('desc')
+  const [selectedMonth, setSelectedMonth] = useState(null)
+
+  const months = useMemo(() => {
+    const keys = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort()
+    return keys.map((key) => ({ key, label: formatMonth(key) }))
+  }, [transactions])
+
+  const displayedTransactions = useMemo(() => {
+    const filtered = selectedMonth
+      ? transactions.filter((t) => t.date.slice(0, 7) === selectedMonth)
+      : transactions
+    return sortTransactions(filtered, sortField, sortDirection)
+  }, [transactions, selectedMonth, sortField, sortDirection])
+
   return (
     <div style={{ background: 'var(--color-surface)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(18,32,46,0.05)' }}>
       <div
@@ -130,11 +157,22 @@ export default function TransactionsCard({
       </div>
 
       {status === 'default' && transactions.length > 0 && (
-        <div>
-          {transactions.map((tx) => (
-            <TransactionRow key={tx.id} tx={tx} categories={categories} onCategoryChange={onCategoryChange} />
-          ))}
-        </div>
+        <>
+          <TransactionControls
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSortFieldChange={setSortField}
+            onSortDirectionToggle={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            months={months}
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+          />
+          <div>
+            {displayedTransactions.map((tx) => (
+              <TransactionRow key={tx.id} tx={tx} categories={categories} onCategoryChange={onCategoryChange} />
+            ))}
+          </div>
+        </>
       )}
 
       {status === 'default' && transactions.length === 0 && (
