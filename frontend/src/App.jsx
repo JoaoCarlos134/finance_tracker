@@ -30,23 +30,35 @@ function App() {
     loadAll()
   }, [])
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0]
-    if (!file) return
-
-    setUploadStatus('Uploading...')
-    try {
-      const result = await uploadCsv(file)
-      setUploadStatus(
-        `Inserted ${result.rows_inserted} of ${result.rows_parsed} rows` +
-          (result.rows_skipped ? ` (${result.rows_skipped} skipped)` : ''),
-      )
-      loadAll()
-    } catch (err) {
-      setUploadStatus(`Upload failed: ${err.message}`)
-    } finally {
-      event.target.value = ''
+  const handleFilesSelected = async (files) => {
+    const csvFiles = files.filter((f) => f.name.toLowerCase().endsWith('.csv'))
+    if (csvFiles.length === 0) {
+      setUploadStatus('No .csv files found in that selection')
+      return
     }
+
+    // Sequential, not Promise.all: each POST commits its own DB session, and
+    // running them one at a time keeps per-file failures isolated and the
+    // progress message meaningful for folder uploads with many files.
+    const results = []
+    for (const file of csvFiles) {
+      setUploadStatus(`Uploading ${results.length + 1}/${csvFiles.length}: ${file.name}...`)
+      try {
+        results.push({ file: file.name, ...(await uploadCsv(file)) })
+      } catch (err) {
+        results.push({ file: file.name, failed: true, message: err.message })
+      }
+    }
+
+    const inserted = results.reduce((sum, r) => sum + (r.rows_inserted ?? 0), 0)
+    const skipped = results.reduce((sum, r) => sum + (r.rows_skipped ?? 0), 0)
+    const failed = results.filter((r) => r.failed)
+    setUploadStatus(
+      `${csvFiles.length} file(s): ${inserted} rows inserted` +
+        (skipped ? `, ${skipped} skipped` : '') +
+        (failed.length ? `, ${failed.length} failed (${failed.map((f) => f.file).join(', ')})` : ''),
+    )
+    loadAll()
   }
 
   return (
@@ -63,7 +75,7 @@ function App() {
           status={status}
           transactions={transactions}
           uploadStatus={uploadStatus}
-          onFileChange={handleFileChange}
+          onFilesSelected={handleFilesSelected}
           onRetry={loadAll}
         />
       </div>

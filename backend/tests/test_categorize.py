@@ -46,3 +46,12 @@ def test_barbershop_does_not_collide_with_bar_or_transfer_keywords():
     # "barbearia" contains "bar" as a substring — must not fall through to a
     # hypothetical generic "bar" keyword or any other category.
     assert suggest_category("BARBEARIASHELBY") == "Personal Care"
+
+
+def test_investment_transfer_does_not_collide_with_tim_keyword():
+    # Regression: "investimento" contains "tim" as a substring, which used
+    # to misfire the "tim" (TIM carrier) Utilities keyword and silently
+    # recategorized every investment-account transfer as a phone bill —
+    # found by running the real dataset through /analytics/by-category.
+    assert suggest_category("Transferência enviada para a conta investimento") == "Transfers"
+    assert suggest_category("Transferência recebida da conta investimento") == "Transfers"

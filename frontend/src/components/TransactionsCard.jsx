@@ -43,7 +43,8 @@ function TransactionRow({ tx }) {
   )
 }
 
-function UploadControl({ onFileChange, label }) {
+function UploadControl({ onFilesSelected, label, directory = false }) {
+  const directoryProps = directory ? { webkitdirectory: '', directory: '' } : {}
   return (
     <label
       style={{
@@ -57,12 +58,19 @@ function UploadControl({ onFileChange, label }) {
       }}
     >
       {label}
-      <input type="file" accept=".csv" onChange={onFileChange} style={{ display: 'none' }} />
+      <input
+        type="file"
+        accept=".csv"
+        multiple
+        {...directoryProps}
+        onChange={(e) => onFilesSelected(Array.from(e.target.files))}
+        style={{ display: 'none' }}
+      />
     </label>
   )
 }
 
-export default function TransactionsCard({ status, transactions, uploadStatus, onFileChange, onRetry }) {
+export default function TransactionsCard({ status, transactions, uploadStatus, onFilesSelected, onRetry }) {
   return (
     <div style={{ background: 'var(--color-surface)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(18,32,46,0.05)' }}>
       <div
@@ -80,7 +88,8 @@ export default function TransactionsCard({ status, transactions, uploadStatus, o
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {uploadStatus && <span style={{ fontSize: 12, color: 'var(--color-warm-500)', fontFamily: 'var(--font-numeric)' }}>{uploadStatus}</span>}
-          <UploadControl onFileChange={onFileChange} label="Upload CSV" />
+          <UploadControl onFilesSelected={onFilesSelected} label="Upload CSV" />
+          <UploadControl onFilesSelected={onFilesSelected} label="Upload folder" directory />
         </div>
       </div>
 

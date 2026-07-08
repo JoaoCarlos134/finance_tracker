@@ -57,7 +57,12 @@ CATEGORY_RULES: dict[str, list[str]] = {
         "pedagio",
         "allpark",
     ],
-    "Utilities": ["copel", "sanepar", "energia", "agua", "internet", "vivo", "claro", "tim"],
+    # "tim" removed: it's a substring of "investimento", which silently
+    # miscategorized every investment-account transfer as a phone bill on
+    # real data. "vivo"/"claro"/"agua" are the same shape of risk (short
+    # fragments of common Portuguese words) but unproven either way — left
+    # in until a real false-positive or a real match shows up.
+    "Utilities": ["copel", "sanepar", "energia", "agua", "internet", "vivo", "claro"],
     "Subscriptions": [
         "netflix",
         "spotify",
