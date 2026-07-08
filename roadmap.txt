@@ -9,6 +9,17 @@ CONVENÇÕES
 [~] em andamento (nunca deixar assim ao final de uma sessão sem justificativa abaixo do item)
 [x] concluído e testado (nunca marcar sem ter testado de fato)
 
+PORTE (tamanho estimado da mudança — aplicado a itens novos a partir de 2026-07-08;
+itens antigos sem tag não foram reclassificados retroativamente)
+----------
+[baixo]  poucas horas, escopo isolado a 1 arquivo/camada, baixo risco
+[médio]  toca múltiplos arquivos ou as duas camadas (backend+frontend), sem
+         migração de dados arriscada
+[alto]   múltiplas sessões, migração de dados, ou superfície sensível (auth, deploy)
+[espera] bloqueado — depende de mais dados (histórico temporal maior) para ser
+         feito com honestidade; não iniciar mesmo havendo tempo disponível, ver
+         princípio "Honest states" do DESIGN.md
+
 ==========================
 FASE 1 — Backend Skeleton
 ==========================
@@ -26,6 +37,21 @@ FASE 1 — Backend Skeleton
 [x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
 [x] (novo, 2026-07-08) Suporte a extrato bancário (Data;Hora;Descricao;Valor;Saldo, ano com 2 dígitos, "-R$ X" com espaço residual) e fatura de cartão (Data;Estabelecimento;Portador;Valor;Parcela) no mesmo parser — 6 novos testes cobrindo os dois formatos + o cenário de dedup entre eles
 [x] (novo, 2026-07-08) Persistir o tipo de conta (bank/credit_card) no Transaction — coluna account_type, preenchida a partir da flag is_credit_card já calculada em ingest.py. GET /transactions e todos os /analytics/* aceitam ?account_type=bank|credit_card. Dados locais existentes (78 linhas reais) migrados via ALTER TABLE + backfill por nome de arquivo (contém "fatura" → credit_card). Testado: test_account_type_persisted_and_filterable
+[ ] (novo, 2026-07-08) [médio] Deduplicação no re-upload de CSV — hash de
+    (date, description, amount, account_type) com índice único ou checagem
+    antes do insert; resposta agregada passa a informar "N inseridas, M
+    ignoradas (duplicata)". Motivado pela decisão de 2026-07-06 que adiou
+    isso "até entender o que é uma duplicata real" — condição já satisfeita
+    (os 2 formatos reais estão mapeados) e o upload de pasta tornou reupload
+    acidental mais provável.
+[ ] (novo, 2026-07-08) [médio] Migrações com Alembic — formaliza o que hoje é
+    feito via ALTER TABLE manual (ver account_type acima). Primeira migração
+    deve capturar o schema atual; a constraint única da deduplicação vira a
+    segunda. Pré-requisito para a migração a Postgres da Fase 6.
+[ ] (novo, 2026-07-08) [médio] Histórico de uploads e desfazer — GET
+    /ingest/files (nome, contagem de linhas, intervalo de datas, a partir de
+    raw_source_file já existente) + DELETE /ingest/files/{name} para remover
+    um upload equivocado sem precisar recriar o banco.
 
 ==========================
 FASE 2 — Frontend Skeleton
@@ -35,6 +61,11 @@ FASE 2 — Frontend Skeleton
 [x] (corrigido, 2026-07-08) Componente de upload de CSV — mesma verificação acima
 [x] (corrigido, 2026-07-08) Estados: loading, erro, vazio — implementados; confirmação visual feita (screenshot via Chrome headless local, estado vazio e populado, ambos batendo com DESIGN.md)
 [x] (novo, 2026-07-08) Upload de pasta inteira (input com webkitdirectory) além do upload de arquivo único — uploads sequenciais por arquivo, status agregado ("N file(s): X rows inserted..."). Testado com os 3 arquivos reais do usuário via chamadas diretas à API (equivalente ao que o botão faz); não testado clicando literalmente no seletor de pasta do SO (sem ferramenta de automação de navegador disponível)
+[ ] (novo, 2026-07-08) [baixo] Testes de frontend com Vitest — cobrir
+    utils/summary.js (formatMonth, cálculo de saldo/receita/gasto) e a
+    lógica de ordenação/filtro de TransactionControls.jsx, hoje verificada
+    só com um script Node avulso. Alinha o frontend ao que o CI já garante
+    no backend (ruff + pytest); `npm run build` sozinho não cobre lógica.
 
 ==========================
 FASE 3 — Categorização
@@ -47,10 +78,12 @@ FASE 3 — Categorização
 ==========================
 FASE 4 — Modelo Preditivo
 ==========================
-[ ] Feature engineering (gastos por categoria, sazonalidade, lags)
-[ ] Modelo de previsão de gasto mensal por categoria (Prophet ou XGBoost)
-[ ] Avaliação do modelo (métricas, backtesting)
-[ ] Endpoint que expõe a previsão para o frontend
+[ ] [espera] Feature engineering (gastos por categoria, sazonalidade, lags) —
+    ver convenção [espera] no topo do arquivo; dados atuais (~2 meses reais)
+    não sustentam sazonalidade nem lags com honestidade
+[ ] [espera] Modelo de previsão de gasto mensal por categoria (Prophet ou XGBoost)
+[ ] [espera] Avaliação do modelo (métricas, backtesting)
+[ ] [espera] Endpoint que expõe a previsão para o frontend
 
 ==========================
 FASE 5 — Design e Dashboard
@@ -68,13 +101,18 @@ FASE 5 — Design e Dashboard
 [x] (novo, 2026-07-08) Visualização separada por conta: toggle All/Bank/Credit Card (AccountTypeToggle.jsx) — refiltra transações, resumo e os dois gráficos novos
 [x] (novo, 2026-07-08) Gráfico de transações ao longo do tempo (MonthlyChart.jsx, barras Income/Spending por mês, Recharts) — usa /analytics/monthly, já multi-mês
 [x] (pedido do usuário, 2026-07-08) Barra de ordenação de transações (data/categoria/valor, crescente/decrescente) e separação por mês na lista — TransactionControls.jsx, mesmo padrão visual do AccountTypeToggle (pills). Client-side only (sort/filter em cima do array já carregado), sem mudança no backend; verificado com teste de lógica em Node (ordenação de data/valor/categoria, incluindo categoria nula)
-[ ] Gráfico de previsão vs. realizado
+[ ] [espera] Gráfico de previsão vs. realizado — depende do modelo da Fase 4
 [ ] Revisão de responsividade (mobile-first)
 
 ==========================
 FASE 6 — Deploy
 ==========================
 [ ] Migração SQLite → Postgres
+[ ] (novo, 2026-07-08) [alto] Autenticação básica antes do deploy — o app
+    público vai expor dados financeiros reais do usuário; mínimo viável é
+    um único usuário com senha/token (ou servir com dados sintéticos de
+    demonstração no link público, a decidir). Deve ser resolvido antes do
+    item "Link ao vivo" abaixo, não depois.
 [ ] Deploy backend (Render/Fly.io)
 [ ] Deploy frontend
 [ ] Link ao vivo no README / portfólio
@@ -265,6 +303,15 @@ DECISÕES TÉCNICAS REGISTRADAS
   em mover para o servidor, e mantém a mudança isolada em um componente
   sem tocar App.jsx/backend. Revisitar se o volume de dados crescer muito
   (paginação real exigiria ordenação no servidor).
+
+- 2026-07-08 — Adotada convenção de PORTE (baixo/médio/alto) e tag [espera]
+  para itens do roadmap, documentada na seção CONVENÇÕES no topo do
+  arquivo. Objetivo: tornar visível o custo estimado de cada item pendente
+  e marcar explicitamente o que está bloqueado por falta de dados (Fase 4
+  inteira e o gráfico de previsão da Fase 5), em vez de misturá-los com
+  itens simplesmente não iniciados. Itens já concluídos ou já existentes
+  antes desta data não foram reclassificados retroativamente — a tag só
+  se aplica a itens novos daqui em diante.
 
 ==========================
 NOTAS / BLOQUEIOS
