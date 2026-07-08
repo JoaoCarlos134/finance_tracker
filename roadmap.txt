@@ -25,6 +25,7 @@ FASE 1 — Backend Skeleton
 [x] (novo, 2026-07-06) Lint com ruff (pyproject.toml) — código limpo
 [x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
 [x] (novo, 2026-07-08) Suporte a extrato bancário (Data;Hora;Descricao;Valor;Saldo, ano com 2 dígitos, "-R$ X" com espaço residual) e fatura de cartão (Data;Estabelecimento;Portador;Valor;Parcela) no mesmo parser — 6 novos testes cobrindo os dois formatos + o cenário de dedup entre eles
+[ ] (pedido do usuário, 2026-07-08) Persistir o tipo de conta (bank/credit_card) no Transaction — hoje o parser já sabe diferenciar (flag is_credit_card em ingest.py, usada para inverter sinal e descartar "Pagamento de fatura"), mas descarta essa informação depois de processar a linha; guardar explicitamente permite filtrar/agrupar por conta sem reinferir do nome do arquivo. Pré-requisito para a separação bank/cartão pedida na Fase 5
 
 ==========================
 FASE 2 — Frontend Skeleton
@@ -41,7 +42,7 @@ FASE 3 — Categorização
 [x] Categorização baseada em regras (palavras-chave no description) — app/services/categorize.py (comerciantes brasileiros, sem acento/caixa), aplicada na ingestão + POST /categorize/run para reprocessar; testada em test_categorize.py e test_api.py
 [x] (ampliado, 2026-07-08) Regras expandidas com padrões reais de fatura de cartão (nomes de POS curtos como "DL*GOOGLE YOUTUB") — cobertura foi de 45/78 (58%) para 10/78 (13%) linhas não categorizadas nos 3 arquivos reais do usuário; o restante ficou intencionalmente sem categoria (nomes de comerciante ambíguos, ver Notas)
 [x] (novo, 2026-07-08) Interface para o usuário corrigir/confirmar categoria — dropdown inline em cada linha (TransactionsCard.jsx) chamando PATCH /transactions/{id}, update otimista com rollback em erro. Novo endpoint GET /categories lista as categorias conhecidas para popular o dropdown (evita duplicar a lista entre frontend/backend). Testado: 30 testes de backend passando + verificação funcional via curl (PATCH muda category_source para 'user') + screenshot confirmando que não quebrou o layout da linha
-[ ] Categorização via modelo (NLP simples) treinado nas correções do usuário — as correções já ficam rotuladas via category_source='user', prontas para virar dados de treino
+[ ] Categorização via modelo (NLP simples) treinado nas correções do usuário — as correções já ficam rotuladas via category_source='user', prontas para virar dados de treino (já estava no roadmap; usuário repetiu o pedido em 2026-07-08, confirmado que segue pendente)
 
 ==========================
 FASE 4 — Modelo Preditivo
@@ -54,14 +55,18 @@ FASE 4 — Modelo Preditivo
 ==========================
 FASE 5 — Design e Dashboard
 ==========================
-[~] Sistema visual importado do Claude Design ("Finance Dashboard System")
-    e implementado em frontend/src/ — theme.css (tokens de cor/tipografia/
-    espaçamento), TopNav, SummaryCard, TransactionsCard (estados default/
-    loading/error/vazio), utils/summary.js (cálculo de saldo/receita/gasto
-    e variação mês-a-mês). Não verificado rodando no navegador — mesmo
-    bloqueio de `npm install` da Fase 2 (ver Notas/Bloqueios).
+[x] (corrigido, 2026-07-08) Sistema visual importado do Claude Design
+    ("Finance Dashboard System") e implementado em frontend/src/ —
+    theme.css (tokens de cor/tipografia/espaçamento), TopNav, SummaryCard,
+    TransactionsCard (estados default/loading/error/vazio, dropdown de
+    categoria), utils/summary.js. Verificado rodando: múltiplos
+    screenshots via Chrome headless, com os 78 dados reais do usuário,
+    batendo com DESIGN.md; status [~] anterior estava desatualizado
 [x] DESIGN.md (paleta, tipografia, grid de espaçamento, estados de componente) — na raiz do repo, espelhando os tokens de frontend/src/styles/theme.css
 [ ] Gráficos de gastos por categoria (Plotly ou Recharts)
+[ ] (pedido do usuário, 2026-07-08) Gráfico de gastos por categoria com percentual do total (pizza/donut) — complementa /analytics/by-category (já existe no backend, retorna total+count por categoria; falta o cálculo de % e a visualização)
+[ ] (pedido do usuário, 2026-07-08) Visualização separada por conta: extrato bancário vs fatura de cartão (filtro/toggle na tela) — depende do item de Fase 1 que persiste o tipo de conta
+[ ] (pedido do usuário, 2026-07-08) Gráfico de transações ao longo do tempo (linha ou barra) usando datas reais, cobrindo tanto extrato quanto fatura, com visualização de múltiplos meses lado a lado (não só o mês atual) — /analytics/monthly já existe no backend e já é multi-mês; falta o gráfico no frontend
 [ ] Gráfico de previsão vs. realizado
 [ ] Revisão de responsividade (mobile-first)
 
