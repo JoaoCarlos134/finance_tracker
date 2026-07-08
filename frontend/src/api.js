@@ -22,6 +22,22 @@ export function fetchMonthly() {
   return getJson('/analytics/monthly')
 }
 
+export function fetchCategories() {
+  return getJson('/categories')
+}
+
+export async function updateCategory(id, category) {
+  const res = await fetch(`${API_BASE_URL}/transactions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category }),
+  })
+  if (!res.ok) {
+    throw new Error(`PATCH /transactions/${id} failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function uploadCsv(file) {
   const formData = new FormData()
   formData.append('file', file)

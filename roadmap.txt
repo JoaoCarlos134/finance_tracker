@@ -40,7 +40,7 @@ FASE 3 — Categorização
 ==========================
 [x] Categorização baseada em regras (palavras-chave no description) — app/services/categorize.py (comerciantes brasileiros, sem acento/caixa), aplicada na ingestão + POST /categorize/run para reprocessar; testada em test_categorize.py e test_api.py
 [x] (ampliado, 2026-07-08) Regras expandidas com padrões reais de fatura de cartão (nomes de POS curtos como "DL*GOOGLE YOUTUB") — cobertura foi de 45/78 (58%) para 10/78 (13%) linhas não categorizadas nos 3 arquivos reais do usuário; o restante ficou intencionalmente sem categoria (nomes de comerciante ambíguos, ver Notas)
-[~] Interface para o usuário corrigir/confirmar categoria — lado da API pronto (PATCH /transactions/{id} marca category_source='user', preservado pelo /categorize/run); UI no frontend em andamento (próxima tarefa)
+[x] (novo, 2026-07-08) Interface para o usuário corrigir/confirmar categoria — dropdown inline em cada linha (TransactionsCard.jsx) chamando PATCH /transactions/{id}, update otimista com rollback em erro. Novo endpoint GET /categories lista as categorias conhecidas para popular o dropdown (evita duplicar a lista entre frontend/backend). Testado: 30 testes de backend passando + verificação funcional via curl (PATCH muda category_source para 'user') + screenshot confirmando que não quebrou o layout da linha
 [ ] Categorização via modelo (NLP simples) treinado nas correções do usuário — as correções já ficam rotuladas via category_source='user', prontas para virar dados de treino
 
 ==========================
@@ -196,6 +196,22 @@ DECISÕES TÉCNICAS REGISTRADAS
 - 2026-07-08 — Coluna "Parcela" (parcelamento) da fatura é anexada à
   description quando != "-", ex. "HUGO BOSS DO BRA (1 de 10)" — evita
   perder essa informação sem precisar de coluna nova no schema.
+
+- 2026-07-08 — GET /categories novo (routers/categories.py) só para
+  listar as chaves de CATEGORY_RULES — usado pelo dropdown de correção
+  no frontend em vez de hardcodar a lista lá, então uma categoria nova
+  adicionada no backend aparece automaticamente na UI.
+
+- 2026-07-08 — Correção de categoria no frontend é otimista (atualiza a
+  linha na tela antes da resposta do PATCH chegar, reverte se falhar) —
+  UI mais responsiva; não recarrega summary/monthly no update porque
+  categoria não afeta valores, só rótulos.
+
+- 2026-07-08 — Bug de layout encontrado no screenshot: o <select> nativo
+  do dropdown de categoria não tinha `width:100%` nem `appearance:none`,
+  então a seta nativa do navegador ficava sem largura reservada e
+  aparecia solta perto da coluna de data em vez de colada no texto da
+  categoria. Corrigido em theme.css (.category-select).
 
 ==========================
 NOTAS / BLOQUEIOS

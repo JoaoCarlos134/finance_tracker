@@ -16,7 +16,35 @@ function SkeletonRow() {
   )
 }
 
-function TransactionRow({ tx }) {
+function CategorySelect({ tx, categories, onCategoryChange }) {
+  return (
+    <select
+      className="category-select"
+      value={tx.category ?? ''}
+      onChange={(e) => onCategoryChange(tx.id, e.target.value || null)}
+      style={{
+        fontSize: 13,
+        fontFamily: 'var(--font-body)',
+        color: tx.category ? 'var(--color-warm-600)' : 'var(--color-warm-300)',
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 4,
+        padding: '3px 4px',
+        cursor: 'pointer',
+        maxWidth: '100%',
+      }}
+    >
+      <option value="">— Uncategorized</option>
+      {categories.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function TransactionRow({ tx, categories, onCategoryChange }) {
   const negative = isNegative(tx.amount)
   return (
     <div
@@ -26,7 +54,7 @@ function TransactionRow({ tx }) {
         <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--color-warm-100)', flexShrink: 0 }} />
         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-ink-900)' }}>{tx.description}</div>
       </div>
-      <div style={{ fontSize: 13, color: 'var(--color-warm-600)' }}>{tx.category ?? '—'}</div>
+      <CategorySelect tx={tx} categories={categories} onCategoryChange={onCategoryChange} />
       <div style={{ fontSize: 13, fontFamily: 'var(--font-numeric)', color: 'var(--color-warm-600)' }}>{formatDate(tx.date)}</div>
       <div
         style={{
@@ -70,7 +98,15 @@ function UploadControl({ onFilesSelected, label, directory = false }) {
   )
 }
 
-export default function TransactionsCard({ status, transactions, uploadStatus, onFilesSelected, onRetry }) {
+export default function TransactionsCard({
+  status,
+  transactions,
+  categories,
+  uploadStatus,
+  onFilesSelected,
+  onCategoryChange,
+  onRetry,
+}) {
   return (
     <div style={{ background: 'var(--color-surface)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(18,32,46,0.05)' }}>
       <div
@@ -96,7 +132,7 @@ export default function TransactionsCard({ status, transactions, uploadStatus, o
       {status === 'default' && transactions.length > 0 && (
         <div>
           {transactions.map((tx) => (
-            <TransactionRow key={tx.id} tx={tx} />
+            <TransactionRow key={tx.id} tx={tx} categories={categories} onCategoryChange={onCategoryChange} />
           ))}
         </div>
       )}

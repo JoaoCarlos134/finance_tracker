@@ -67,6 +67,24 @@ def test_patch_missing_transaction_returns_404(client):
     assert res.status_code == 404
 
 
+def test_patch_category_to_null_clears_user_source(client):
+    _ingest_fixture(client)
+    tx = client.get("/transactions").json()[0]
+    client.patch(f"/transactions/{tx['id']}", json={"category": "Custom"})
+
+    res = client.patch(f"/transactions/{tx['id']}", json={"category": None})
+    assert res.json()["category"] is None
+    assert res.json()["category_source"] is None
+
+
+def test_list_categories(client):
+    res = client.get("/categories")
+    assert res.status_code == 200
+    categories = res.json()
+    assert "Groceries" in categories
+    assert "Income" in categories
+
+
 def test_categorize_run_preserves_user_labels(client):
     _ingest_fixture(client)
     transactions = client.get("/transactions").json()

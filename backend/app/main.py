@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import analytics, categorization, ingestion, transactions
+from app.routers import analytics, categories, categorization, ingestion, transactions
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(transactions.router)
 app.include_router(ingestion.router)
 app.include_router(categorization.router)
+app.include_router(categories.router)
 app.include_router(analytics.router)
 
 

@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { fetchAnalyticsSummary, fetchMonthly, fetchTransactions, uploadCsv } from './api'
+import {
+  fetchAnalyticsSummary,
+  fetchCategories,
+  fetchMonthly,
+  fetchTransactions,
+  updateCategory,
+  uploadCsv,
+} from './api'
 import TopNav from './components/TopNav'
 import SummaryCard from './components/SummaryCard'
 import TransactionsCard from './components/TransactionsCard'
@@ -11,16 +18,18 @@ function App() {
   const [transactions, setTransactions] = useState([])
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [monthly, setMonthly] = useState([])
+  const [categories, setCategories] = useState([])
   const [status, setStatus] = useState('loading') // 'loading' | 'error' | 'default'
   const [uploadStatus, setUploadStatus] = useState(null)
 
   const loadAll = () => {
     setStatus('loading')
-    Promise.all([fetchTransactions(), fetchAnalyticsSummary(), fetchMonthly()])
-      .then(([txs, summaryData, monthlyData]) => {
+    Promise.all([fetchTransactions(), fetchAnalyticsSummary(), fetchMonthly(), fetchCategories()])
+      .then(([txs, summaryData, monthlyData, categoryData]) => {
         setTransactions(txs)
         setSummary(summaryData)
         setMonthly(monthlyData)
+        setCategories(categoryData)
         setStatus('default')
       })
       .catch(() => setStatus('error'))
@@ -29,6 +38,19 @@ function App() {
   useEffect(() => {
     loadAll()
   }, [])
+
+  const handleCategoryChange = async (id, category) => {
+    // Optimistic: the row updates instantly, reverted only if the PATCH
+    // fails. category_source flips server-side too, but no need to refetch
+    // it here since nothing in this view displays that field.
+    const previous = transactions
+    setTransactions((txs) => txs.map((t) => (t.id === id ? { ...t, category } : t)))
+    try {
+      await updateCategory(id, category)
+    } catch {
+      setTransactions(previous)
+    }
+  }
 
   const handleFilesSelected = async (files) => {
     const csvFiles = files.filter((f) => f.name.toLowerCase().endsWith('.csv'))
@@ -74,8 +96,10 @@ function App() {
         <TransactionsCard
           status={status}
           transactions={transactions}
+          categories={categories}
           uploadStatus={uploadStatus}
           onFilesSelected={handleFilesSelected}
+          onCategoryChange={handleCategoryChange}
           onRetry={loadAll}
         />
       </div>

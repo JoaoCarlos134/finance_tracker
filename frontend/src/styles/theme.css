@@ -74,3 +74,17 @@ a:hover {
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
 }
+
+.category-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+}
+
+.category-select:hover {
+  background: var(--color-hover-row);
+}
+
+.category-select:focus {
+  outline: 1px solid var(--color-accent);
+}

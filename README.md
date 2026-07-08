@@ -23,6 +23,7 @@ train an ML categorizer without being overwritten.
 | `GET /transactions?limit=&offset=` | Paginated transaction list |
 | `PATCH /transactions/{id}` | Correct a category (marks it user-labeled) |
 | `POST /categorize/run` | Re-apply rules to all non-user-labeled rows |
+| `GET /categories` | Known category names, for populating the correction dropdown |
 | `GET /analytics/summary` | Balance, income, spending, count (SQL aggregation) |
 | `GET /analytics/monthly` | Per-month income/spending/net |
 | `GET /analytics/by-category` | Totals and counts per category |
