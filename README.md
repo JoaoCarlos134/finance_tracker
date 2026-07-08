@@ -3,9 +3,9 @@
 ![CI](https://github.com/JoaoCarlos134/finance_tracker/actions/workflows/ci.yml/badge.svg)
 
 Personal finance tracker built as a portfolio project. Ingests manually
-exported CSV statements (currently targeting XP Investimentos exports),
-stores them in a database, categorizes them with keyword rules, and serves
-analytics to a React dashboard.
+exported CSV statements from XP Investimentos — both checking-account
+extracts and credit card invoices — stores them in a database, categorizes
+them with keyword rules, and serves analytics to a React dashboard.
 
 **Stack:** FastAPI + SQLAlchemy + SQLite (backend), React + Vite (frontend).
 
@@ -101,14 +101,15 @@ both servers in their own windows and opens the dashboard in your browser.
 ## Using it
 
 1. Start the backend and frontend (above, or via `run.bat`).
-2. Drop a CSV export from your brokerage into `data/raw/` (optional — you can
-   upload from anywhere on disk via the browser file picker).
-3. Open `http://localhost:5173`, use the file picker to upload the CSV.
+2. Drop a CSV export from XP into `data/raw/` (optional — you can upload from
+   anywhere on disk via the browser file picker).
+3. Open the frontend URL Vite prints (`5178` by default), use the file picker
+   to upload the CSV.
 4. The parsed rows appear in the transactions table below.
 
-No real XP export yet? Upload `backend/tests/fixtures/sample_statement.csv`
-instead — it's synthetic data in a plausible XP-like format (semicolon
-delimiter, Brazilian dates/numbers) so you can exercise the whole
+No real export yet? Upload `backend/tests/fixtures/sample_statement.csv`,
+`sample_bank_extract.csv`, or `sample_fatura.csv` instead — synthetic data in
+the real XP formats (see below) so you can exercise the whole
 upload → DB → UI flow before a real file is available.
 
 ## Design system
@@ -119,27 +120,35 @@ Claude Design project: dominant ink-navy (`#12202E`) with a copper accent
 Archivo with tabular numerals for all monetary/date figures — see
 `frontend/src/styles/theme.css` for the full token set. The app keeps the
 "Finance Tracker" name rather than the design mockup's placeholder brand
-("Ledger"). Balance/income/spending are computed client-side from
-`GET /transactions` (`frontend/src/utils/summary.js`); the month-over-month
-trend indicator only appears once at least two months of data exist, rather
-than fabricating a number from a single month.
-
-This hasn't been visually verified in a browser yet — see the `npm install`
-blocker above.
+("Ledger"). Balance/income/spending come from `GET /analytics/summary`
+(SQL aggregation on the backend); the month-over-month trend indicator only
+appears once at least two months of data exist, rather than fabricating a
+number from a single month.
 
 ## CSV format notes
 
-The exact column layout of XP Investimentos exports isn't pinned down yet,
-so `backend/app/services/ingest.py` does best-effort, case-insensitive
-matching against a list of candidate header names for `date`, `description`,
-and `amount` (see `COLUMN_CANDIDATES`). It also sniffs the delimiter (`,` or
-`;`) and falls back to Brazilian number formatting (`1.234,56`) and
-`dd/mm/yyyy` dates if the direct parse fails.
+`backend/app/services/ingest.py` handles two real XP export formats on one
+code path, auto-detected from the header columns (not the filename):
 
-If your real export doesn't match, either:
-- add its actual header names to `COLUMN_CANDIDATES`, or
-- share a sample export so the parser can be tightened to the real schema.
+- **Checking account extract** (`extrato_de_*.csv`): `Data;Hora;Descricao;
+  Valor;Saldo`, semicolon-delimited, 2-digit years (`06/07/26`), amounts
+  like `-R$ 2.400,00`. Negative = money out, positive = money in.
+- **Credit card invoice** (`Fatura*.csv`): `Data;Estabelecimento;Portador;
+  Valor;Parcela`, 4-digit years, amounts like `R$ 130,00` — but purchases
+  are *positive* in the file and only the "Pagamento de fatura" row is
+  negative, the opposite of the extract's convention. The parser flips
+  purchase signs to match, and **drops "Pagamento de fatura" rows entirely**
+  — that payment is already recorded as a withdrawal in the checking
+  extract, so keeping both would double-count it. Installment info
+  ("Parcela") is appended to the description, e.g. `HUGO BOSS DO BRA
+  (1 de 10)`.
+
+Column matching is otherwise generic/best-effort (case-insensitive
+candidate list in `COLUMN_CANDIDATES`), with delimiter sniffing (`,` or `;`)
+and Brazilian number/date fallbacks. If a real export doesn't match, add its
+header names to `COLUMN_CANDIDATES` or share a sample.
 
 Re-uploading a CSV (or one with overlapping rows) currently inserts
-duplicates — there's no dedup logic yet. This can be added once we know
-what a genuine duplicate looks like in a real export.
+duplicates — there's no dedup logic for repeat uploads yet (the bank/card
+cross-file dedup above is a different, narrower thing: it only drops the
+one row type that's guaranteed to be a duplicate by construction).

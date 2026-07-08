@@ -80,3 +80,55 @@ def test_unparseable_amount_is_skipped_with_error():
     assert len(rows) == 1
     assert len(errors) == 1
     assert "Row 3" in errors[0]
+
+
+def test_bank_extract_two_digit_year_and_rs_prefixed_negative_amount():
+    # Real bank extracts write negative amounts as "-R$ 2.400,00" — the sign
+    # sits before "R$", which used to leave a stray space after stripping it.
+    csv_bytes = (
+        "Data;Hora;Descricao;Valor;Saldo\n"
+        "06/07/26;08:40:46;Pix enviado para Fulano;-R$ 2.400,00;R$ 1.295,63\n"
+        "06/07/26;08:28:25;Pix recebido de Ciclano;R$ 2.538,83;R$ 3.695,63\n"
+    ).encode("utf-8-sig")
+    rows, errors = parse_transactions_csv(csv_bytes)
+
+    assert errors == []
+    assert len(rows) == 2
+    assert rows[0].date == date(2026, 7, 6)
+    assert rows[0].amount == Decimal("-2400.00")
+    assert rows[1].amount == Decimal("2538.83")
+
+
+def test_credit_card_invoice_flips_sign_and_drops_payment_row():
+    csv_bytes = (
+        "Data;Estabelecimento;Portador;Valor;Parcela\n"
+        "09/06/2026;Pagamento de fatura;JOAO JUNIOR;R$ -130,00; de 1\n"
+        "05/05/2026;BARBEARIA MODELO;JOAO JUNIOR;R$ 45,00;-\n"
+        "21/04/2026;LOJA DE ROUPAS XPTO;JOAO JUNIOR;R$ 955,00;1 de 10\n"
+    ).encode("utf-8-sig")
+    rows, errors = parse_transactions_csv(csv_bytes)
+
+    assert errors == []
+    # "Pagamento de fatura" is dropped: that cash movement is already
+    # recorded as a withdrawal in the bank extract.
+    assert len(rows) == 2
+
+    barbearia = next(r for r in rows if "BARBEARIA" in r.description)
+    assert barbearia.amount == Decimal("-45.00")  # purchases flip to negative
+
+    installment = next(r for r in rows if "XPTO" in r.description)
+    assert installment.amount == Decimal("-955.00")
+    assert installment.description == "LOJA DE ROUPAS XPTO (1 de 10)"
+
+
+def test_credit_card_payment_row_matched_case_and_accent_insensitively():
+    csv_bytes = (
+        "Data;Estabelecimento;Portador;Valor;Parcela\n"
+        "09/06/2026;PAGAMENTO DE FATURA;JOAO JUNIOR;R$ -130,00; de 1\n"
+        "05/05/2026;Loja Teste;JOAO JUNIOR;R$ 10,00;-\n"
+    ).encode("utf-8-sig")
+    rows, errors = parse_transactions_csv(csv_bytes)
+
+    assert errors == []
+    assert len(rows) == 1
+    assert rows[0].description == "Loja Teste"

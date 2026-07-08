@@ -26,3 +26,23 @@ def test_specific_categories_win_over_generic():
     # "Rendimento" (Investments) must win even though a transfer description
     # could also contain generic transfer words later in the rule table.
     assert suggest_category("Rendimento transferido via PIX") == "Investments"
+
+
+def test_matches_real_credit_card_merchant_patterns():
+    # Real invoice merchant strings are terse POS names, not full words —
+    # these were added after checking actual statement data.
+    assert suggest_category("BARBEARIASHELBY") == "Personal Care"
+    assert suggest_category("CLAUDE.AI SUBSCRIPTION") == "Subscriptions"
+    assert suggest_category("DL*GOOGLE YOUTUB") == "Subscriptions"
+    assert suggest_category("EBANX*CRUNCHYROLL") == "Subscriptions"
+    assert suggest_category("HUGO BOSS DO BRA (1 de 10)") == "Shopping"
+    assert suggest_category("PARKSHOPPING BARIGUI") == "Shopping"
+    assert suggest_category("TACIANE LANCHES") == "Dining"
+    assert suggest_category("PAGAMENTO DE FATURA") == "Credit Card Payment"
+    assert suggest_category("Pagamento para LIDER CORPORATE TUR E EVENTOS") == "Travel"
+
+
+def test_barbershop_does_not_collide_with_bar_or_transfer_keywords():
+    # "barbearia" contains "bar" as a substring — must not fall through to a
+    # hypothetical generic "bar" keyword or any other category.
+    assert suggest_category("BARBEARIASHELBY") == "Personal Care"

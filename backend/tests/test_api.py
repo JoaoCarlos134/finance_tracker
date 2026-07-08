@@ -3,11 +3,11 @@ from pathlib import Path
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def _ingest_fixture(client):
-    csv_bytes = (FIXTURES_DIR / "sample_statement.csv").read_bytes()
+def _ingest_fixture(client, filename="sample_statement.csv"):
+    csv_bytes = (FIXTURES_DIR / filename).read_bytes()
     res = client.post(
         "/ingest/csv",
-        files={"file": ("sample_statement.csv", csv_bytes, "text/csv")},
+        files={"file": (filename, csv_bytes, "text/csv")},
     )
     assert res.status_code == 200
     return res.json()
@@ -93,6 +93,26 @@ def test_analytics_summary_sums_exactly(client):
     assert body["spending"] == "-571.45"
     assert body["balance"] == "5673.87"
     assert body["transaction_count"] == 7
+
+
+def test_ingesting_bank_and_card_statements_avoids_double_counting(client):
+    # sample_bank_extract.csv has "PAGAMENTO DE FATURA;-R$ 130,00" and
+    # sample_fatura.csv has the matching "Pagamento de fatura;R$ -130,00" —
+    # the same real payment. It must only be counted once.
+    _ingest_fixture(client, "sample_bank_extract.csv")
+    _ingest_fixture(client, "sample_fatura.csv")
+
+    transactions = client.get("/transactions").json()
+    assert len(transactions) == 6  # 4 bank rows + 3 card rows - 1 dropped payment row
+    # only the bank's own withdrawal row survives; the card side's copy is dropped
+    payment_rows = [t for t in transactions if t["description"].lower() == "pagamento de fatura"]
+    assert len(payment_rows) == 1
+    assert payment_rows[0]["raw_source_file"] == "sample_bank_extract.csv"
+
+    body = client.get("/analytics/summary").json()
+    # bank: -240 + 2538.83 - 700 - 130 = 1468.83
+    # card (payment dropped, purchases flipped negative): -45.00 - 955.00
+    assert body["balance"] == "468.83"
 
 
 def test_analytics_monthly_groups_by_month(client):

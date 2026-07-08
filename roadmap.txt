@@ -1,7 +1,7 @@
 FINANCE TRACKER — ROADMAP
 ==========================
 Fonte de verdade do estado do projeto. Atualizado a cada sessão de trabalho.
-Última atualização: 2026-07-06
+Última atualização: 2026-07-08
 
 CONVENÇÕES
 ----------
@@ -24,19 +24,21 @@ FASE 1 — Backend Skeleton
 [x] (novo, 2026-07-06) Endpoints de analytics em SQL — /analytics/summary, /analytics/monthly, /analytics/by-category — testados com somas exatas
 [x] (novo, 2026-07-06) Lint com ruff (pyproject.toml) — código limpo
 [x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
+[x] (novo, 2026-07-08) Suporte a extrato bancário (Data;Hora;Descricao;Valor;Saldo, ano com 2 dígitos, "-R$ X" com espaço residual) e fatura de cartão (Data;Estabelecimento;Portador;Valor;Parcela) no mesmo parser — 6 novos testes cobrindo os dois formatos + o cenário de dedup entre eles
 
 ==========================
 FASE 2 — Frontend Skeleton
 ==========================
-[~] Scaffold Vite + React — arquivos escritos manualmente (package.json, vite.config.js, index.html, src/), mas `npm install` nunca completou nesta máquina (ver Notas/Bloqueios); não verificado rodando
-[~] Página de listagem de transações (consome API do backend) — implementada em src/components/TransactionsCard.jsx, não verificada rodando
-[~] Componente de upload de CSV — implementado em src/components/TransactionsCard.jsx via input file + POST /ingest/csv, não verificado rodando
-[~] Estados: loading, erro, vazio (sem transações ainda) — implementados em src/components/TransactionsCard.jsx (prop `status`), não verificados rodando
+[x] (corrigido, 2026-07-08) Scaffold Vite + React — `npm install` foi concluído (ver Decisões, entrada do .npmrc temporário) e `npm run build` passa; status [~] anterior estava desatualizado
+[x] (corrigido, 2026-07-08) Página de listagem de transações — testada indiretamente: servidor dev rodou, módulos compilaram sem erro no Vite, backend respondeu /transactions via curl
+[x] (corrigido, 2026-07-08) Componente de upload de CSV — mesma verificação acima
+[x] (corrigido, 2026-07-08) Estados: loading, erro, vazio — implementados, compilam sem erro; confirmação visual pelo usuário no navegador ainda recomendada (ver Notas)
 
 ==========================
 FASE 3 — Categorização
 ==========================
 [x] Categorização baseada em regras (palavras-chave no description) — app/services/categorize.py (comerciantes brasileiros, sem acento/caixa), aplicada na ingestão + POST /categorize/run para reprocessar; testada em test_categorize.py e test_api.py
+[x] (ampliado, 2026-07-08) Regras expandidas com padrões reais de fatura de cartão (nomes de POS curtos como "DL*GOOGLE YOUTUB") — cobertura foi de 45/78 (58%) para 10/78 (13%) linhas não categorizadas nos 3 arquivos reais do usuário; o restante ficou intencionalmente sem categoria (nomes de comerciante ambíguos, ver Notas)
 [~] Interface para o usuário corrigir/confirmar categoria — lado da API pronto (PATCH /transactions/{id} marca category_source='user', preservado pelo /categorize/run); falta a UI no frontend
 [ ] Categorização via modelo (NLP simples) treinado nas correções do usuário — as correções já ficam rotuladas via category_source='user', prontas para virar dados de treino
 
@@ -169,6 +171,31 @@ DECISÕES TÉCNICAS REGISTRADAS
   e checagem do <title>, já que o log do Vite tem códigos ANSI que
   quebravam o parsing por regex).
 
+- 2026-07-08 — Usuário adicionou os 2 tipos reais de arquivo em data/raw/:
+  extrato bancário (extrato_de_*.csv) e fatura de cartão de crédito
+  (Fatura*.csv). Descoberto por inspeção: extrato usa ano com 2 dígitos
+  ("06/07/26") e "-R$ X,XX" (sinal antes de "R$"); fatura usa ano com 4
+  dígitos e "R$ -X,XX" (sinal depois de "R$"). _parse_amount corrigido
+  para remover todo espaço em branco após tirar "R$", não só as pontas —
+  "- R$ 2.400,00" virava "- 2.400,00" (espaço interno) e quebrava o
+  Decimal(). DATE_FORMATS ganhou "%d/%m/%y".
+
+- 2026-07-08 — DECISÃO (confirmada com o usuário): fatura de cartão tem
+  convenção de sinal invertida (compra = positivo no arquivo) e a linha
+  "Pagamento de fatura" duplica um valor que já aparece no extrato
+  bancário como "PAGAMENTO DE FATURA" (confirmado batendo os valores nos
+  3 arquivos reais — bate exato). Resolvido no parser: linhas
+  "Pagamento de fatura" são descartadas ao processar fatura de cartão
+  (identificada pela presença das colunas Portador/Parcela no cabeçalho,
+  não pelo nome do arquivo — mais robusto), e o sinal das compras é
+  invertido para ficar negativo (convenção do sistema: negativo = gasto).
+  Sem essa correção, /analytics/summary contaria o pagamento da fatura
+  duas vezes.
+
+- 2026-07-08 — Coluna "Parcela" (parcelamento) da fatura é anexada à
+  description quando != "-", ex. "HUGO BOSS DO BRA (1 de 10)" — evita
+  perder essa informação sem precisar de coluna nova no schema.
+
 ==========================
 NOTAS / BLOQUEIOS
 ==========================
@@ -197,3 +224,18 @@ NOTAS / BLOQUEIOS
 - 2026-07-06 — Verificação visual do dashboard no navegador ainda não
   confirmada pelo usuário (o run.ps1 abriu http://localhost:5178/). Se algo
   estiver quebrado visualmente, tratar na próxima sessão.
+
+- 2026-07-08 — 10 de 78 linhas dos 3 arquivos reais ficaram sem categoria
+  de propósito (nomes de comerciante ambíguos: BLACKBIRD, BTBGOLDEN,
+  COPIADORA COPY NEW, EXPRESSO MOVE CIA LTDA, I M BARAN, JHD COMERCIO DE A,
+  JIM.COM* 65089499 NICOLAS, MAIS 55, RODRIGOSANTOS, TODESCHINI SERVICOS
+  DE) — categorizar via PATCH /transactions/{id} quando o usuário souber
+  do que se trata; isso também alimenta o dataset de treino da Fase 3.
+
+- 2026-07-08 — Os 3 arquivos reais em data/raw/ NÃO foram commitados (só
+  os fixtures sintéticos em backend/tests/fixtures/) — .gitignore já
+  cobre data/raw/*. Regras de categorização novas usam nomes reais de
+  comerciante (ex. "CLAUDE.AI SUBSCRIPTION", "HUGO BOSS") em código que
+  VAI para o repositório público — são nomes de empresa, não dado
+  pessoal sensível, mas o usuário confirmou explicitamente antes dessa
+  adição.

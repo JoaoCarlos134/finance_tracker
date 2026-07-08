@@ -1,29 +1,47 @@
 import csv
 import io
+import unicodedata
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-# Candidate header names per field, since the exact XP export schema isn't
-# pinned down yet. Add real column names here once a live export is available.
+# Candidate header names per field. "estabelecimento" covers credit card
+# invoices (Fatura*.csv), which have no "descricao" column of their own.
 COLUMN_CANDIDATES: dict[str, list[str]] = {
     "date": ["date", "data", "data lancamento", "data do lancamento"],
-    "description": ["description", "descricao", "historico", "descrição", "histórico"],
+    "description": [
+        "description",
+        "descricao",
+        "historico",
+        "descrição",
+        "histórico",
+        "estabelecimento",
+    ],
     "amount": ["amount", "valor", "valor (r$)", "valor liquido"],
 }
 
-DATE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"]
+# Presence of either column identifies a credit card invoice (Fatura*.csv)
+# rather than a bank account extract: purchases are positive there (the
+# opposite of the bank extract's convention), and its "Pagamento de fatura"
+# rows duplicate a payment already recorded on the bank side.
+CREDIT_CARD_MARKER_COLUMNS = ["portador", "parcela"]
+PAGAMENTO_FATURA = "pagamento de fatura"
+
+DATE_FORMATS = ["%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d", "%m/%d/%Y"]
 
 
 def _normalize(header: str) -> str:
     return header.strip().lower()
 
 
-def _find_column(fieldnames: list[str], field: str) -> str | None:
-    candidates = COLUMN_CANDIDATES[field]
-    normalized = {_normalize(h): h for h in fieldnames}
-    for candidate in candidates:
-        if candidate in normalized:
-            return normalized[candidate]
+def _normalize_text(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.strip().lower())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def _find_column(normalized_map: dict[str, str], field: str) -> str | None:
+    for candidate in COLUMN_CANDIDATES[field]:
+        if candidate in normalized_map:
+            return normalized_map[candidate]
     return None
 
 
@@ -38,7 +56,10 @@ def _parse_date(raw: str) -> date:
 
 
 def _parse_amount(raw: str) -> Decimal:
-    raw = raw.strip().replace("R$", "").strip()
+    # Strip the "R$" marker and *all* whitespace, not just leading/trailing:
+    # the bank extract writes negative amounts as "-R$ 2.400,00", which
+    # leaves a stray space ("- 2.400,00") once "R$" is removed.
+    raw = "".join(raw.replace("R$", "").split())
     try:
         return Decimal(raw)
     except InvalidOperation:
@@ -59,10 +80,10 @@ class ParsedRow:
 
 
 def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]]:
-    """Parse a brokerage CSV export into rows, returning (rows, error_messages).
+    """Parse a bank extract or credit card invoice CSV into rows.
 
-    Column matching is generic/best-effort (see COLUMN_CANDIDATES) since the
-    exact XP export schema hasn't been pinned down yet.
+    Column matching is generic/best-effort (see COLUMN_CANDIDATES) to cover
+    both statement types on one code path.
     """
     text = raw_bytes.decode("utf-8-sig", errors="replace")
     # Brazilian exports commonly use ";" as the delimiter, since "," is the
@@ -77,9 +98,13 @@ def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]
         return [], ["CSV file has no header row"]
 
     fieldnames = list(reader.fieldnames)
-    date_col = _find_column(fieldnames, "date")
-    desc_col = _find_column(fieldnames, "description")
-    amount_col = _find_column(fieldnames, "amount")
+    normalized_map = {_normalize(h): h for h in fieldnames}
+    is_credit_card = any(col in normalized_map for col in CREDIT_CARD_MARKER_COLUMNS)
+
+    date_col = _find_column(normalized_map, "date")
+    desc_col = _find_column(normalized_map, "description")
+    amount_col = _find_column(normalized_map, "amount")
+    parcela_col = normalized_map.get("parcela")
 
     missing = [
         name
@@ -96,9 +121,25 @@ def parse_transactions_csv(raw_bytes: bytes) -> tuple[list[ParsedRow], list[str]
     errors: list[str] = []
     for i, row in enumerate(reader, start=2):  # start=2: header is row 1
         try:
+            description = row[desc_col].strip()
+
+            # This exact payment is already recorded as a withdrawal in the
+            # bank extract; keeping it here too would double-count it.
+            if is_credit_card and _normalize_text(description) == PAGAMENTO_FATURA:
+                continue
+
             parsed_date = _parse_date(row[date_col])
             parsed_amount = _parse_amount(row[amount_col])
-            description = row[desc_col].strip()
+
+            if is_credit_card:
+                # Invoice purchases are positive in the file; our convention
+                # is negative = money spent, so flip them.
+                parsed_amount = -parsed_amount
+                if parcela_col:
+                    parcela = row.get(parcela_col, "").strip()
+                    if parcela and parcela != "-":
+                        description = f"{description} ({parcela})"
+
             rows.append(ParsedRow(parsed_date, description, parsed_amount))
         except (ValueError, KeyError) as exc:
             errors.append(f"Row {i}: {exc}")
