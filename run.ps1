@@ -23,20 +23,32 @@ if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
     exit 1
 }
 
+# All HTTP probing below uses curl.exe (bundled with Windows 10+), NEVER
+# Invoke-WebRequest. IWR (.NET Framework) permanently breaks in this process
+# once it probes a port that isn't listening yet: on this machine the first
+# connect attempt to a closed local port hangs (SYN dropped, not refused),
+# the aborted attempts jam the ServicePoint for that host:port (connection
+# limit 2), and every later IWR call to the same URL then times out forever
+# even after the server is up - measured: 240s of failures while curl.exe
+# got 200 OK the whole time. This was the real cause of the long-standing
+# "Backend didn't answer within 30s" message. The .exe suffix matters:
+# bare "curl" in PowerShell 5.1 is an alias for Invoke-WebRequest.
+function Test-Health([string]$Url) {
+    $body = & curl.exe -s -m 2 $Url 2>$null
+    return ($LASTEXITCODE -eq 0 -and $body -match '"ok"')
+}
+
 # uvicorn --reload spawns its actual worker via Python's multiprocessing;
 # that worker can outlive the console window that launched it (observed:
 # a worker from a closed window kept serving /health for days, silently
 # squatting the port and making every subsequent launch collide). Detect
 # an already-live backend first instead of blindly starting a duplicate.
 $backendUp = $false
-try {
-    $res = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing -TimeoutSec 2
-    if ($res.StatusCode -eq 200) {
-        $backendUp = $true
-        Write-Host "Backend already running on http://localhost:8000 - reusing it (no new window opened)." -ForegroundColor Yellow
-        Write-Host "  If this is stale, close it first: Get-NetTCPConnection -LocalPort 8000 -State Listen | Stop-Process -Id { `$_.OwningProcess } -Force"
-    }
-} catch {}
+if (Test-Health "http://localhost:8000/health") {
+    $backendUp = $true
+    Write-Host "Backend already running on http://localhost:8000 - reusing it (no new window opened)." -ForegroundColor Yellow
+    Write-Host "  If this is stale, close it first: Get-NetTCPConnection -LocalPort 8000 -State Listen | Stop-Process -Id { `$_.OwningProcess } -Force"
+}
 
 if (-not $backendUp) {
     Write-Host "Starting backend (FastAPI) on http://localhost:8000 ..."
@@ -53,10 +65,7 @@ if (-not $backendUp) {
 
     Write-Host "Waiting for the backend to answer on /health ..."
     foreach ($attempt in 1..30) {
-        try {
-            $res = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing -TimeoutSec 2
-            if ($res.StatusCode -eq 200) { $backendUp = $true; break }
-        } catch {}
+        if (Test-Health "http://localhost:8000/health") { $backendUp = $true; break }
         Start-Sleep -Seconds 1
     }
     if (-not $backendUp) {
@@ -75,13 +84,11 @@ Write-Host "Looking for the frontend dev server ..."
 $frontendUrl = $null
 foreach ($attempt in 1..30) {
     foreach ($port in 5178..5188) {
-        try {
-            $res = Invoke-WebRequest -Uri "http://localhost:$port/" -UseBasicParsing -TimeoutSec 2
-            if ($res.Content -match "<title>Finance Tracker</title>") {
-                $frontendUrl = "http://localhost:$port/"
-                break
-            }
-        } catch {}
+        $content = & curl.exe -s -m 2 "http://localhost:$port/" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $content -match "<title>Finance Tracker</title>") {
+            $frontendUrl = "http://localhost:$port/"
+            break
+        }
     }
     if ($frontendUrl) { break }
     Start-Sleep -Seconds 1

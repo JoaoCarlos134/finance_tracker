@@ -387,7 +387,20 @@ DECISÕES TÉCNICAS REGISTRADAS
   que os originou; (2) `--reload-dir app` no comando do uvicorn, para não
   observar venv/ (o padrão do --reload é vigiar o diretório de trabalho
   inteiro). Nenhuma das duas foi suficiente para eliminar o timeout de
-  ponta a ponta via Start-Process — item continua [~], não [x].
+  ponta a ponta via Start-Process — item continuou aberto até mais tarde
+  no mesmo dia, quando a causa real foi isolada: ver a entrada seguinte.
+
+- 2026-07-10 — run.ps1: TODO o probing HTTP trocado de Invoke-WebRequest
+  para curl.exe (função Test-Health) — Invoke-WebRequest no PowerShell 5.1
+  fica permanentemente quebrado no processo depois de sondar uma porta
+  que ainda não abriu (conexões abortadas por timeout entopem o
+  ServicePoint do .NET para aquele host:porta; todas as chamadas
+  seguintes à mesma URL expiram para sempre, mesmo com o servidor de pé).
+  Era a causa real do aviso "Backend didn't answer within 30s" aberto
+  desde 2026-07-06 — o backend sempre subiu em ~0s. curl.exe vem no
+  Windows 10+; o sufixo .exe é obrigatório (curl sem sufixo é alias de
+  IWR no PS 5.1). Verificado: run.ps1 de estado frio completo em 5s, sem
+  aviso. Investigação completa e achados colaterais em Notas/Bloqueios.
 
 - 2026-07-10 — DECISÃO de design da deduplicação: assinatura de duplicata é
   (date, description, amount, account_type), sem incluir raw_source_file —
@@ -417,10 +430,9 @@ NOTAS / BLOQUEIOS
   pacotes), `npm run build` passa. package-lock.json commitado (o CI usa
   `npm ci`). Nota: `npm audit` não pôde rodar (mesmo bloqueio de rede).
 
-- 2026-07-06 — PENDENTE (retomado e parcialmente investigado em 2026-07-10,
-  AINDA NÃO RESOLVIDO): no teste do run.ps1, o backend não respondeu em
-  /health dentro dos 30s de polling (o frontend subiu e o navegador abriu
-  normalmente).
+- 2026-07-06 — RESOLVIDO (2026-07-10, ver desfecho ao final da entrada):
+  no teste do run.ps1, o backend não respondeu em /health dentro dos 30s
+  de polling (o frontend subiu e o navegador abriu normalmente).
 
   Investigação de 2026-07-10 — o que foi encontrado:
 
@@ -469,15 +481,61 @@ NOTAS / BLOQUEIOS
      cronometrada do caminho exato do Start-Process foi iniciada para
      isolar a causa, mas foi interrompida antes de terminar.
 
-  ESTADO ATUAL: run.ps1 tem as correções 1 e 2 aplicadas (reaproveitar
-  backend já rodando + `--reload-dir app`), o timeout voltou a 30s (não
-  foi deixado em 45s, já que --reload-dir tornou o start isolado quase
-  instantâneo — o problema restante não é resolvido por esperar mais, é
-  a sobrecarga do Start-Process ainda não identificada). O bug original
-  (mensagem de timeout no primeiro `run.ps1` de uma sessão) PODE ainda
-  se reproduzir. Item mantido [~] — não marcar [x] até rodar run.ps1 do
-  zero (sem nenhum backend já ativo) e confirmar que a mensagem de aviso
-  não aparece, ou até isolar e corrigir a causa 3.
+  ESTADO em 2026-07-10 (parcial): run.ps1 tem as correções 1 e 2 aplicadas
+  (reaproveitar backend já rodando + `--reload-dir app`), timeout em 30s.
+  Restava a causa 3 não isolada.
+
+  RESOLVIDO (2026-07-10, mais tarde na mesma sessão) — causa 3 isolada e
+  corrigida. Não havia NENHUMA sobrecarga no Start-Process: medição
+  definitiva com 3 sinais em paralelo mostrou o backend escutando na porta
+  e respondendo 200 via curl em ~0s após o Start-Process. O que falhava
+  era o PRÓPRIO POLLING do run.ps1:
+
+  CAUSA REAL: Invoke-WebRequest (PowerShell 5.1 / .NET Framework)
+  "envenena" o processo quando a primeira sondagem acontece antes do
+  servidor abrir a porta. Nesta máquina, o connect a uma porta local
+  fechada não é recusado (RST) — o SYN é descartado (provável firewall/
+  EDR), então a tentativa trava até o TimeoutSec. As tentativas abortadas
+  ficam presas no ServicePoint do .NET para aquele host:porta (limite
+  padrão de 2 conexões), e TODA chamada IWR subsequente à mesma URL no
+  mesmo processo entra na fila atrás delas e expira para sempre — mesmo
+  com o servidor já de pé. Comprovado: poller IWR falhou por 240s
+  seguidos com "O tempo limite da operação foi atingido" enquanto curl
+  respondia 200 na mesma URL o tempo todo, e um IWR novo em OUTRO
+  processo respondia 200 na hora. Como o run.ps1 sonda /health
+  imediatamente após o Start-Process (antes do uvicorn abrir a porta), a
+  falha era determinística. Também explica por que o check do frontend
+  nunca falhava: a primeira sondagem ao Vite acontecia depois do Vite já
+  estar de pé (nunca envenenava).
+
+  FIX: função Test-Health em run.ps1 usando curl.exe (embutido no
+  Windows 10+) no lugar de TODOS os Invoke-WebRequest do script (check
+  de reuso, polling do backend e varredura de portas do frontend).
+  Detalhe importante: o sufixo .exe é obrigatório — "curl" sem sufixo no
+  PowerShell 5.1 é alias de Invoke-WebRequest.
+
+  VERIFICADO de ponta a ponta: com nenhum processo nas portas (estado
+  frio real), `powershell -NoProfile -File run.ps1` subiu backend +
+  frontend e abriu o navegador em 5 segundos, sem nenhuma mensagem de
+  aviso. O item está encerrado.
+
+  ACHADOS COLATERAIS da mesma investigação (registrados para o futuro):
+  (a) Os testes e2e anteriores deixaram 3 workers uvicorn órfãos
+      (multiprocessing-fork), cada um segurando o socket herdado da porta
+      8000 mesmo com o pai morto — o netstat continua mostrando o PID do
+      processo que fez o bind (já morto), então `taskkill /T` no PID da
+      janela não os alcança (a árvore quebra quando o pai morre). Para
+      matar de verdade: procurar processos python com
+      "--multiprocessing-fork" na linha de comando e matar pelo PID deles.
+  (b) Erro de diagnóstico meu durante a sessão: usei
+      `grep "LISTENING.*:8000"` para conferir porta livre, mas o netstat
+      imprime o endereço ANTES da palavra LISTENING — o padrão nunca
+      casava e deu "porta livre" falso várias vezes. O padrão correto é
+      `grep ":8000" | grep LISTENING`. Registrado porque contaminou parte
+      das medições intermediárias (não as conclusões finais, refeitas com
+      o check correto).
+  (c) O Vite escuta em [::1] (IPv6), não em 127.0.0.1 — qualquer
+      diagnóstico futuro de porta do frontend precisa olhar IPv6 também.
 
 - 2026-07-06 — RESOLVIDO (2026-07-08): verificação visual feita via
   screenshot de Chrome headless local (já instalado, sem precisar
