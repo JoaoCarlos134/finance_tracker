@@ -109,6 +109,22 @@ FASE 2 — Frontend Skeleton
     categoria nula e não-mutação do array). 11 testes, todos passando
     (`npm test`). CI atualizado (.github/workflows/ci.yml) para rodar
     `npm test` antes de `npm run build`.
+    CORREÇÃO (2026-07-10, mesmo dia): o primeiro push quebrou o job de
+    frontend do CI em ~15s — vitest tinha sido instalado na versão 4, que
+    exige vite ^6/7/8 enquanto o projeto usa vite 5; o npm aninhou um
+    vite@8.1.4 privado dentro de node_modules/vitest/ e o npm 11 local
+    gravou um package-lock.json INCOMPLETO (sem a resolução do
+    esbuild@0.28.x que esse vite 8 aninhado exige). O npm 11 valida esse
+    lockfile como OK (por isso nada falhou localmente), mas o npm 10 do CI
+    (Node 20) rejeita com 27x "Missing: ... from lock file" no `npm ci`.
+    Diagnóstico feito lendo o log real do job via API do GitHub (repo é
+    privado e não há gh CLI — token lido do Git Credential Manager, nunca
+    impresso). Fix: vitest rebaixado para ^3.2.7, que suporta vite ^5 —
+    elimina o vite duplicado aninhado em vez de remendar o lockfile;
+    validado localmente com `npx npm@10 ci --dry-run` (o mesmo npm do CI),
+    11 testes e build passando. Bônus: os warnings de
+    esbuild/oxc deprecado no `npm test` sumiram (eram do rolldown-vite
+    interno do vitest 4 lendo uma config de vite 5).
 
 ==========================
 FASE 3 — Categorização
