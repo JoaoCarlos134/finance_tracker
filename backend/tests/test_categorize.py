@@ -55,3 +55,8 @@ def test_investment_transfer_does_not_collide_with_tim_keyword():
     # found by running the real dataset through /analytics/by-category.
     assert suggest_category("Transferência enviada para a conta investimento") == "Transfers"
     assert suggest_category("Transferência recebida da conta investimento") == "Transfers"
+
+
+def test_matches_btbgolden_as_dining():
+    # User confirmed BTBGOLDEN (unlabeled merchant found in real data) is food.
+    assert suggest_category("BTBGOLDEN") == "Dining"

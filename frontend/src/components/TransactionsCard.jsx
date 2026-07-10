@@ -100,7 +100,7 @@ function UploadControl({ onFilesSelected, label, directory = false }) {
   )
 }
 
-function sortTransactions(transactions, field, direction) {
+export function sortTransactions(transactions, field, direction) {
   const sign = direction === 'asc' ? 1 : -1
   return [...transactions].sort((a, b) => {
     if (field === 'amount') return (Number(a.amount) - Number(b.amount)) * sign

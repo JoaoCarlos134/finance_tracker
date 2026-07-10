@@ -30,6 +30,7 @@ class IngestResult(BaseModel):
     filename: str
     rows_parsed: int
     rows_inserted: int
+    rows_duplicate: int
     rows_skipped: int
     errors: list[str]
 

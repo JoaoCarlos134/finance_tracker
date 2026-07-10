@@ -47,6 +47,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
         "dark sugar",
         "lindt",
         "frit batatas",
+        "btbgolden",
     ],
     "Transport": [
         "uber",

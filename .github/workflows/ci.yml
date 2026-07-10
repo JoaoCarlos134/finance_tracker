@@ -20,6 +20,9 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: ruff check .
+      # Exercises the migrations against a fresh DB (CI has none committed),
+      # the same "new contributor" path the baseline migration is for.
+      - run: alembic upgrade head
       - run: pytest -v
 
   frontend:
@@ -35,4 +38,5 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build

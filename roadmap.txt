@@ -1,7 +1,7 @@
 FINANCE TRACKER — ROADMAP
 ==========================
 Fonte de verdade do estado do projeto. Atualizado a cada sessão de trabalho.
-Última atualização: 2026-07-08
+Última atualização: 2026-07-10
 
 CONVENÇÕES
 ----------
@@ -37,17 +37,57 @@ FASE 1 — Backend Skeleton
 [x] (novo, 2026-07-06) CI no GitHub Actions (.github/workflows/ci.yml): ruff + pytest + build do frontend a cada push — badge no README; primeira execução ainda não observada (verificar aba Actions após o push)
 [x] (novo, 2026-07-08) Suporte a extrato bancário (Data;Hora;Descricao;Valor;Saldo, ano com 2 dígitos, "-R$ X" com espaço residual) e fatura de cartão (Data;Estabelecimento;Portador;Valor;Parcela) no mesmo parser — 6 novos testes cobrindo os dois formatos + o cenário de dedup entre eles
 [x] (novo, 2026-07-08) Persistir o tipo de conta (bank/credit_card) no Transaction — coluna account_type, preenchida a partir da flag is_credit_card já calculada em ingest.py. GET /transactions e todos os /analytics/* aceitam ?account_type=bank|credit_card. Dados locais existentes (78 linhas reais) migrados via ALTER TABLE + backfill por nome de arquivo (contém "fatura" → credit_card). Testado: test_account_type_persisted_and_filterable
-[ ] (novo, 2026-07-08) [médio] Deduplicação no re-upload de CSV — hash de
-    (date, description, amount, account_type) com índice único ou checagem
-    antes do insert; resposta agregada passa a informar "N inseridas, M
-    ignoradas (duplicata)". Motivado pela decisão de 2026-07-06 que adiou
-    isso "até entender o que é uma duplicata real" — condição já satisfeita
-    (os 2 formatos reais estão mapeados) e o upload de pasta tornou reupload
-    acidental mais provável.
-[ ] (novo, 2026-07-08) [médio] Migrações com Alembic — formaliza o que hoje é
-    feito via ALTER TABLE manual (ver account_type acima). Primeira migração
-    deve capturar o schema atual; a constraint única da deduplicação vira a
-    segunda. Pré-requisito para a migração a Postgres da Fase 6.
+[x] (novo, 2026-07-08, implementado 2026-07-10) Deduplicação no re-upload de
+    CSV — checagem antes do insert (sem migração/índice único ainda; ver
+    item de Alembic abaixo) em app/routers/ingestion.py: assinatura (date,
+    description, amount, account_type), carregada uma vez do banco antes do
+    loop e atualizada a cada insert (cobre duplicata contra uploads
+    anteriores E duplicata dentro do mesmo arquivo). IngestResult ganhou
+    campo rows_duplicate; frontend (App.jsx) mostra "N duplicate" na
+    mensagem de status quando > 0. Trade-off aceito: duas transações reais
+    distintas com mesma data/descrição/valor exatos colapsam em uma só —
+    aceito porque o bug motivador (reupload acidental) é bem mais comum na
+    prática. 4 testes novos em test_api.py (reupload do mesmo arquivo,
+    linha repetida dentro do mesmo arquivo, mesma assinatura em account_type
+    diferente não é duplicata). 36 testes passando, ruff limpo.
+    LIMPEZA DE DADOS REAIS: rodando a checagem contra o banco local vigente
+    (finance_tracker.db, não versionado) encontrei 78 grupos de duplicata
+    cobrindo 156 das 187 linhas — o dataset original de 3 arquivos parece
+    ter sido enviado 2x (o achado do BTBGOLDEN não era isolado). Removidas
+    as linhas duplicadas mantendo sempre a linha com category_source='user'
+    quando havia divergência (4 grupos: TODESCHINI SERVICOS DE, COPIADORA
+    COPY NEW, MAIS 55, Pix recebido de Paulo e Freitag — os 4 verificados
+    manualmente pós-limpeza, categoria de usuário preservada nos 4). Backup
+    do banco antes da limpeza em
+    backend/finance_tracker.db.bak-2026-07-10-predelup (não versionado,
+    local apenas). 109 linhas reais restantes, 0 assinaturas duplicadas.
+    Ver Notas/Bloqueios para o achado completo.
+[x] (novo, 2026-07-08, implementado 2026-07-10) Migrações com Alembic —
+    backend/alembic/ inicializado; env.py importa app.database.Base +
+    app.models e lê a URL de app.database.SQLALCHEMY_DATABASE_URL (uma
+    fonte de verdade só, sem duplicar a URL no alembic.ini), com fallback
+    só se nada já tiver sido setado no Config (permite override
+    programático, usado para testar a migração num banco descartável sem
+    tocar no banco real). Migração baseline
+    (14993afbf73b_baseline_schema.py) escrita à mão, não autogerada — o
+    banco real já tinha esse schema, então autogenerate produziria um
+    diff vazio; testada num SQLite descartável (upgrade cria a tabela +
+    3 índices, downgrade remove tudo). requirements.txt ganhou alembic.
+    Base.metadata.create_all(bind=engine) removido de app/main.py — schema
+    agora é só via `alembic upgrade head`; README.md e run.ps1 atualizados
+    com o comando. CI (.github/workflows/ci.yml) roda `alembic upgrade
+    head` contra um banco novo antes do pytest, testando exatamente o
+    caminho de "contribuidor novo clona o repo".
+    ACHADO ao escrever a migração: o banco real local estava com o índice
+    de account_type faltando (a coluna existe, com o dado certo, mas sem
+    o índice que o modelo declara com index=True) — outra consequência do
+    ALTER TABLE manual de 2026-07-08 não ter replicado o `create_all`
+    inteiro. Índice criado no banco real antes de fazer `alembic stamp
+    head` (stamp, não upgrade, já que o schema em si já batia). Constraint
+    única de deduplicação (mencionada no item de dedup acima) NÃO foi
+    adicionada como migração ainda — o dedup ficou só na checagem em
+    Python; virá como uma segunda migração quando/se decidirmos reforçar
+    no nível do banco.
 [ ] (novo, 2026-07-08) [médio] Histórico de uploads e desfazer — GET
     /ingest/files (nome, contagem de linhas, intervalo de datas, a partir de
     raw_source_file já existente) + DELETE /ingest/files/{name} para remover
@@ -61,11 +101,14 @@ FASE 2 — Frontend Skeleton
 [x] (corrigido, 2026-07-08) Componente de upload de CSV — mesma verificação acima
 [x] (corrigido, 2026-07-08) Estados: loading, erro, vazio — implementados; confirmação visual feita (screenshot via Chrome headless local, estado vazio e populado, ambos batendo com DESIGN.md)
 [x] (novo, 2026-07-08) Upload de pasta inteira (input com webkitdirectory) além do upload de arquivo único — uploads sequenciais por arquivo, status agregado ("N file(s): X rows inserted..."). Testado com os 3 arquivos reais do usuário via chamadas diretas à API (equivalente ao que o botão faz); não testado clicando literalmente no seletor de pasta do SO (sem ferramenta de automação de navegador disponível)
-[ ] (novo, 2026-07-08) [baixo] Testes de frontend com Vitest — cobrir
-    utils/summary.js (formatMonth, cálculo de saldo/receita/gasto) e a
-    lógica de ordenação/filtro de TransactionControls.jsx, hoje verificada
-    só com um script Node avulso. Alinha o frontend ao que o CI já garante
-    no backend (ruff + pytest); `npm run build` sozinho não cobre lógica.
+[x] (novo, 2026-07-10) Testes de frontend com Vitest — frontend/src/utils/summary.test.js
+    (formatAmount, isNegative, formatDate, formatMonth, monthOverMonthChange,
+    incluindo o guard de baseline perto de zero) e
+    frontend/src/components/TransactionsCard.test.jsx (sortTransactions,
+    agora exportada, cobrindo ordenação por data/valor/categoria com
+    categoria nula e não-mutação do array). 11 testes, todos passando
+    (`npm test`). CI atualizado (.github/workflows/ci.yml) para rodar
+    `npm test` antes de `npm run build`.
 
 ==========================
 FASE 3 — Categorização
@@ -313,6 +356,32 @@ DECISÕES TÉCNICAS REGISTRADAS
   antes desta data não foram reclassificados retroativamente — a tag só
   se aplica a itens novos daqui em diante.
 
+- 2026-07-10 — `npm install -D vitest jsdom` bateu no mesmo
+  SELF_SIGNED_CERT_IN_CHAIN do proxy SSL corporativo documentado em
+  2026-07-06. Reaplicado o mesmo workaround já aprovado: `.npmrc` temporário
+  com strict-ssl=false só durante o install, removido logo em seguida.
+  vitest/jsdom entraram em package.json normalmente; `npm ci` no CI não é
+  afetado (não faz novo resolve de rede além do lockfile).
+
+- 2026-07-10 — run.ps1 alterado com 2 correções parciais para o item
+  pendente de /health (ver Notas/Bloqueios para a investigação completa):
+  (1) verifica se algo já responde em /health:8000 antes de abrir uma
+  janela nova, reaproveitando em vez de duplicar — mitiga colisão com
+  workers uvicorn --reload órfãos, que sobrevivem ao fechamento da janela
+  que os originou; (2) `--reload-dir app` no comando do uvicorn, para não
+  observar venv/ (o padrão do --reload é vigiar o diretório de trabalho
+  inteiro). Nenhuma das duas foi suficiente para eliminar o timeout de
+  ponta a ponta via Start-Process — item continua [~], não [x].
+
+- 2026-07-10 — DECISÃO de design da deduplicação: assinatura de duplicata é
+  (date, description, amount, account_type), sem incluir raw_source_file —
+  o objetivo é pegar "o mesmo lançamento apareceu de novo", inclusive vindo
+  de um arquivo com nome diferente (ex. export renomeado). Checagem feita
+  em Python (carrega assinaturas existentes num set antes do loop) em vez
+  de constraint única no banco — mais simples, não exige migração, e
+  qualquer futura constraint via Alembic pode reusar exatamente essa mesma
+  definição de assinatura como índice único.
+
 ==========================
 NOTAS / BLOQUEIOS
 ==========================
@@ -332,11 +401,67 @@ NOTAS / BLOQUEIOS
   pacotes), `npm run build` passa. package-lock.json commitado (o CI usa
   `npm ci`). Nota: `npm audit` não pôde rodar (mesmo bloqueio de rede).
 
-- 2026-07-06 — PENDENTE: no teste do run.ps1, o backend não respondeu em
+- 2026-07-06 — PENDENTE (retomado e parcialmente investigado em 2026-07-10,
+  AINDA NÃO RESOLVIDO): no teste do run.ps1, o backend não respondeu em
   /health dentro dos 30s de polling (o frontend subiu e o navegador abriu
-  normalmente). Causa ainda não investigada — pode ser cold start do venv
-  em OneDrive ou falha na janela do uvicorn. Verificar na próxima sessão:
-  se a janela do backend mostrar erro, corrigir; senão, aumentar o timeout.
+  normalmente).
+
+  Investigação de 2026-07-10 — o que foi encontrado:
+
+  1. ACHADO (resolvido): um worker uvicorn --reload órfão, de uma sessão de
+     2026-07-06, estava vivo havia 4 dias e ocupando a porta 8000 sozinho,
+     respondendo /health normalmente. `uvicorn --reload` no Windows spawna
+     o worker real via multiprocessing.spawn; esse worker sobrevive ao
+     fechamento da janela/console que o originou (matar a janela PowerShell
+     pai — mesmo com Stop-Process -Force — não mata o worker). Levou 3
+     tentativas de kill para identificar e encerrar o processo certo: o PID
+     reportado por Get-NetTCPConnection ficava "piscando" entre existir e
+     não existir por causa do próprio ciclo de restart do --reload. Processo
+     órfão finalmente encerrado; porta 8000 confirmada livre.
+     CORRIGIDO em run.ps1: antes de abrir uma janela nova, verifica se
+     algo já responde em /health na porta 8000 e reaproveita em vez de
+     duplicar (evita a colisão silenciosa que esse tipo de órfão causa).
+     Mensagem de erro inclui o comando para o usuário encerrar manualmente
+     um processo antigo caso o reaproveitamento não seja o desejado.
+
+  2. ACHADO (mitigado, não eliminado): por padrão, `uvicorn --reload`
+     escaneia recursivamente todo o diretório de trabalho (backend/,
+     incluindo venv/ — dezenas de milhares de arquivos) para montar seu
+     estado inicial de observação de arquivos, antes de considerar o
+     servidor "iniciado". Nesta pasta sincronizada via OneDrive, cada
+     stat() desse escaneamento passa pelo filtro de sincronização em
+     nuvem. Medido: um teste ficou mais de 45s sem responder /health com
+     esse comportamento padrão.
+     CORRIGIDO (parcialmente) em run.ps1: adicionado `--reload-dir app`
+     ao comando do uvicorn, restringindo o watcher a backend/app/ (poucos
+     arquivos .py) em vez do diretório inteiro. Testado isoladamente
+     (uvicorn lançado direto, sem janela nova): respondeu em bem menos de
+     1s, contra >45s antes da mudança.
+
+  3. NÃO RESOLVIDO: mesmo com a correção 2 aplicada, rodar run.ps1 de
+     ponta a ponta (via Start-Process, do jeito que o script realmente
+     lança o backend, em janela PowerShell nova) ainda produziu "Backend
+     didn't answer within 30s" nesse timeout — porém um monitor externo
+     confirmou que o backend ficou saudável pouco depois, já fora da
+     janela de 30s do script. Ou seja: o fix da causa 2 reduziu bastante o
+     tempo de start "puro" do uvicorn, mas o caminho específico de lançar
+     via Start-Process em janela nova ainda carrega uma sobrecarga extra
+     não isolada — hipóteses não testadas: escaneamento de antivírus/EDR
+     corporativo num processo/janela recém-criado, custo de inicialização
+     do console/conhost do Windows, ou alguma interação adicional com o
+     OneDrive específica de janelas novas. Uma medição controlada e
+     cronometrada do caminho exato do Start-Process foi iniciada para
+     isolar a causa, mas foi interrompida antes de terminar.
+
+  ESTADO ATUAL: run.ps1 tem as correções 1 e 2 aplicadas (reaproveitar
+  backend já rodando + `--reload-dir app`), o timeout voltou a 30s (não
+  foi deixado em 45s, já que --reload-dir tornou o start isolado quase
+  instantâneo — o problema restante não é resolvido por esperar mais, é
+  a sobrecarga do Start-Process ainda não identificada). O bug original
+  (mensagem de timeout no primeiro `run.ps1` de uma sessão) PODE ainda
+  se reproduzir. Item mantido [~] — não marcar [x] até rodar run.ps1 do
+  zero (sem nenhum backend já ativo) e confirmar que a mensagem de aviso
+  não aparece, ou até isolar e corrigir a causa 3.
 
 - 2026-07-06 — RESOLVIDO (2026-07-08): verificação visual feita via
   screenshot de Chrome headless local (já instalado, sem precisar
@@ -349,6 +474,30 @@ NOTAS / BLOQUEIOS
   JIM.COM* 65089499 NICOLAS, MAIS 55, RODRIGOSANTOS, TODESCHINI SERVICOS
   DE) — categorizar via PATCH /transactions/{id} quando o usuário souber
   do que se trata; isso também alimenta o dataset de treino da Fase 3.
+  RESOLVIDO parcialmente em 2026-07-10: usuário confirmou BTBGOLDEN = Dining
+  (bar/restaurante). Categorizadas as linhas existentes no banco local
+  (category_source='user') e adicionada regra permanente em
+  categorize.py + teste de regressão (test_matches_btbgolden_as_dining).
+  9 nomes restam sem categoria.
+  ACHADO no processo: BTBGOLDEN tinha 4 linhas no banco local para só 2
+  datas distintas (13/04 e 20/05, duplicadas 1x cada) — evidência direta
+  de que reuploads acidentais já duplicaram dados reais, reforçando a
+  prioridade do item de deduplicação da Fase 1. A contagem "78 linhas
+  reais" citada nas decisões de 2026-07-08 estava desatualizada por causa
+  dessas duplicatas.
+  RESOLVIDO em 2026-07-10 junto com a implementação da deduplicação (Fase
+  1): o achado do BTBGOLDEN não era isolado — o dataset real inteiro
+  (187 linhas no banco local, não as 78 originais) tinha 78 grupos de
+  duplicata, 156 linhas envolvidas. Toda evidência aponta para os 3
+  arquivos originais terem sido enviados 2x (provavelmente durante os
+  próprios testes de upload de pasta em sessões anteriores). Limpeza
+  feita preservando category_source='user' quando havia divergência entre
+  o par duplicado (4 casos, verificados manualmente pós-limpeza). Backup
+  do banco em backend/finance_tracker.db.bak-2026-07-10-predelup antes da
+  limpeza (não versionado). Resultado: 109 linhas reais, 0 duplicatas.
+  Balanço/receita/gasto no dashboard estavam aproximadamente 2x inflados
+  até esta correção — usuário deve conferir os totais na próxima vez que
+  abrir o app.
 
 - 2026-07-08 — Os 3 arquivos reais em data/raw/ NÃO foram commitados (só
   os fixtures sintéticos em backend/tests/fixtures/) — .gitignore já

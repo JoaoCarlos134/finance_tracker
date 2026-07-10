@@ -102,10 +102,12 @@ function App() {
     }
 
     const inserted = results.reduce((sum, r) => sum + (r.rows_inserted ?? 0), 0)
+    const duplicate = results.reduce((sum, r) => sum + (r.rows_duplicate ?? 0), 0)
     const skipped = results.reduce((sum, r) => sum + (r.rows_skipped ?? 0), 0)
     const failed = results.filter((r) => r.failed)
     setUploadStatus(
       `${csvFiles.length} file(s): ${inserted} rows inserted` +
+        (duplicate ? `, ${duplicate} duplicate` : '') +
         (skipped ? `, ${skipped} skipped` : '') +
         (failed.length ? `, ${failed.length} failed (${failed.map((f) => f.file).join(', ')})` : ''),
     )

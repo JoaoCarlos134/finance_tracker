@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
 from app.routers import analytics, categories, categorization, ingestion, transactions
 
-Base.metadata.create_all(bind=engine)
+# Schema is managed by Alembic (backend/alembic/), not create_all - run
+# `alembic upgrade head` before starting the server. See roadmap.txt
+# (2026-07-10) for why: create_all + manual ALTER TABLE had already let the
+# real dev DB drift from the model (a missing index) without anyone noticing.
 
 app = FastAPI(title="Finance Tracker API")
 

@@ -63,11 +63,14 @@ python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API runs at `http://localhost:8000`. A SQLite file `finance_tracker.db`
-is created automatically in `backend/` on first run (it's gitignored).
+The API runs at `http://localhost:8000`. Schema is managed by Alembic
+(`backend/alembic/`) — `alembic upgrade head` creates `finance_tracker.db`
+in `backend/` on first run (it's gitignored) and applies any new migrations
+after a `git pull`.
 
 Interactive API docs: `http://localhost:8000/docs`
 

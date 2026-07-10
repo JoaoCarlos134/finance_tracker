@@ -199,3 +199,64 @@ def test_ingest_rejects_non_csv_file(client):
         files={"file": ("statement.txt", b"hello", "text/plain")},
     )
     assert res.status_code == 400
+
+
+def test_reuploading_the_same_file_is_deduplicated(client):
+    # Regression: re-uploading a file (e.g. clicking "Upload folder" twice,
+    # or re-selecting an already-ingested statement) used to silently
+    # double every total. Found by inspecting real data: BTBGOLDEN had 4
+    # rows in the DB for only 2 distinct dates.
+    first = _ingest_fixture(client)
+    assert first["rows_inserted"] == 7
+    assert first["rows_duplicate"] == 0
+
+    second = _ingest_fixture(client)
+    assert second["rows_inserted"] == 0
+    assert second["rows_duplicate"] == 7
+
+    transactions = client.get("/transactions").json()
+    assert len(transactions) == 7  # not 14
+
+
+def test_duplicate_rows_within_the_same_file_are_collapsed_once(client):
+    # A CSV that repeats a line only inserts it once, not zero and not two.
+    csv_bytes = (
+        b"Data;Descricao;Valor\r\n"
+        b"05/01/2026;Cafeteria Local;-15,00\r\n"
+        b"05/01/2026;Cafeteria Local;-15,00\r\n"
+    )
+    res = client.post(
+        "/ingest/csv",
+        files={"file": ("repeated_line.csv", csv_bytes, "text/csv")},
+    )
+    body = res.json()
+    assert body["rows_inserted"] == 1
+    assert body["rows_duplicate"] == 1
+
+    transactions = client.get("/transactions").json()
+    assert len(transactions) == 1
+
+
+def test_different_account_types_are_not_treated_as_duplicates(client):
+    # Same date/description/amount can legitimately appear once on the bank
+    # side and once on the card side without being the same transaction -
+    # account_type is part of the dedup signature specifically for this.
+    # sample_bank_extract.csv has "06/07/26;...;Pix enviado para Fulano de
+    # Tal;-R$ 240,00;...". This is the same date/description/amount as a
+    # card statement (positive in-file, flips to -240.00 on parse).
+    _ingest_fixture(client, "sample_bank_extract.csv")
+
+    card_csv = (
+        b"Data;Estabelecimento;Portador;Valor;Parcela\r\n"
+        b"06/07/2026;Pix enviado para Fulano de Tal;JOAO JUNIOR;R$ 240,00;-\r\n"
+    )
+    res = client.post(
+        "/ingest/csv",
+        files={"file": ("card_lookalike.csv", card_csv, "text/csv")},
+    )
+    body = res.json()
+    assert body["rows_duplicate"] == 0
+    assert body["rows_inserted"] == 1
+
+    account_types = {t["account_type"] for t in client.get("/transactions").json()}
+    assert account_types == {"bank", "credit_card"}
