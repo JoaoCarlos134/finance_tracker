@@ -1,7 +1,7 @@
 FINANCE TRACKER — ROADMAP
 ==========================
 Fonte de verdade do estado do projeto. Atualizado a cada sessão de trabalho.
-Última atualização: 2026-07-10
+Última atualização: 2026-11-04
 
 CONVENÇÕES
 ----------
@@ -180,6 +180,13 @@ FASE 6 — Deploy
 DECISÕES TÉCNICAS REGISTRADAS
 ==========================
 (cada entrada: data — decisão — por quê)
+
+- 2026-11-04 — Licença MIT (LICENSE na raiz) — preparação para tornar o
+  repositório público; MIT é o padrão dos outros repos do portfólio.
+  Antes disso o histórico foi verificado: nenhum CSV real em nenhum commit,
+  fixtures sintéticos desde o primeiro, sem segredos. README: mapa do
+  projeto atualizado (faltavam analytics, categorization, categories,
+  db_types, alembic) e seção de licença.
 
 - 2026-07-06 — SQLite escolhido em vez de Postgres na Fase 1 — zero setup
   necessário para começar a desenvolver localmente; migração para Postgres

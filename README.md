@@ -1,6 +1,7 @@
 # Finance Tracker
 
-![CI](https://github.com/JoaoCarlos134/finance_tracker/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/JoaoCarlos134/finance_tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoCarlos134/finance_tracker/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Personal finance tracker built as a portfolio project. Ingests manually
 exported CSV statements from XP Investimentos — both checking-account
@@ -31,28 +32,32 @@ train an ML categorizer without being overwritten.
 ## Project layout
 
 ```
-backend/            FastAPI app
+backend/                FastAPI app
   app/
-    main.py          App entrypoint, CORS, router registration
-    models.py         SQLAlchemy Transaction model
-    schemas.py         Pydantic request/response models
-    services/
-      ingest.py          Generic CSV column-matching + parsing logic
+    main.py             App entrypoint, CORS, router registration
+    database.py         Engine and session
+    db_types.py         MoneyCents: Decimal in Python, integer cents in SQLite
+    models.py           SQLAlchemy Transaction model
+    schemas.py          Pydantic request/response models
     routers/
-      transactions.py    GET /transactions
-      ingestion.py        POST /ingest/csv
-  tests/             pytest suite (unit tests + API tests + a sample fixture)
-frontend/            Vite + React app
+      ingestion.py      POST /ingest/csv
+      transactions.py   GET /transactions, PATCH /transactions/{id}
+      categorization.py POST /categorize/run
+      categories.py     GET /categories
+      analytics.py      summary / monthly / by-category (SQL aggregation)
+    services/
+      ingest.py         CSV parsing: format detection, BR numbers and dates (pure)
+      categorize.py     Keyword rules (pure)
+  alembic/              Schema migrations
+  tests/                pytest: parsing, rules, API end to end; synthetic fixtures
+frontend/               Vite + React app
   src/
-    App.jsx            Page assembly + data fetching/state
-    api.js               fetch wrappers for the backend API
-    components/
-      TopNav.jsx           Nav bar
-      SummaryCard.jsx        Balance/income/spending card
-      TransactionsCard.jsx     Transaction list (default/loading/error/empty)
-    utils/summary.js      Balance/income/spending + month-over-month math
-    styles/theme.css       Design system tokens (color, type, spacing)
-data/raw/             Drop your exported brokerage CSVs here (gitignored)
+    App.jsx             Page assembly, data fetching and state
+    api.js              fetch wrappers for the backend API
+    components/         Nav, summary, monthly and category charts, transactions
+    utils/summary.js    Balance/income/spending and month-over-month math
+    styles/theme.css    Design system tokens (color, type, spacing)
+data/raw/               Drop your exported statements here (gitignored)
 ```
 
 ## Backend setup
@@ -83,8 +88,10 @@ pytest -v
 ```
 
 Covers CSV parsing (English and Brazilian `;`-delimited formats, missing
-columns, unparseable rows) and the API endpoints end-to-end against an
-in-memory SQLite database.
+columns, unparseable rows), the categorization rules, and the API endpoints
+end-to-end against an in-memory SQLite database. The frontend has its own
+Vitest suite: `cd frontend && npm test`. CI runs both, plus `ruff`, the
+migrations against a fresh database and a production build.
 
 ## Frontend setup
 
@@ -156,3 +163,7 @@ Re-uploading a CSV (or one with overlapping rows) currently inserts
 duplicates — there's no dedup logic for repeat uploads yet (the bank/card
 cross-file dedup above is a different, narrower thing: it only drops the
 one row type that's guaranteed to be a duplicate by construction).
+
+## License
+
+[MIT](LICENSE) © João Carlos Jachenski Junior
