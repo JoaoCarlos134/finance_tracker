@@ -10,6 +10,10 @@ them with keyword rules, and serves analytics to a React dashboard.
 
 **Stack:** FastAPI + SQLAlchemy + SQLite (backend), React + Vite (frontend).
 
+![Finance Tracker dashboard: balance, income vs. spending by month, spending by category and recent transactions](docs/screenshots/dashboard.png)
+
+*The dashboard over the synthetic statements in `backend/tests/fixtures/`, one of them recategorized by hand.*
+
 Money is handled as `Decimal` end-to-end on the server (stored as integer
 cents, serialized as exact decimal strings) — floats never enter the
 accounting path. Rule-based categorization runs at ingestion; manual
